@@ -22,12 +22,12 @@
 
         // ⚠️ 여기에 Firebase 설정 정보를 입력하세요 ⚠️
         const firebaseConfig = {
-            apiKey: "AIzaSyDvIxDWBCLCJUoNmCDgb7rpGcCwvt4GaBI",
-            authDomain: "camtech-health.firebaseapp.com",
-            databaseURL: "https://camtech-health-default-rtdb.firebaseio.com",
-            projectId: "camtech-health",
-            messagingSenderId: "315328686502",
-            appId: "1:315328686502:web:0867a05daebc4edc2e4767"
+            apiKey: "여기에_API_KEY_입력",
+            authDomain: "여기에_AUTH_DOMAIN_입력",
+            databaseURL: "여기에_DATABASE_URL_입력",
+            projectId: "여기에_PROJECT_ID_입력",
+            messagingSenderId: "여기에_MESSAGING_SENDER_ID_입력",
+            appId: "여기에_APP_ID_입력"
         };
 
         // Firebase 초기화
@@ -45,6 +45,7 @@
         // 전역 상태
         let exercises = [];
         let selectedMember = 1;
+        let duration = '';
         let showAddForm = false;
         let showPhotos = false;
         let selectedMemberPhotos = null;
@@ -106,8 +107,6 @@
 
         // 운동 기록 추가
         async function addExercise() {
-            const duration = document.getElementById('duration').value;
-            
             if (!duration || !photo) {
                 alert('운동 시간과 사진을 모두 입력해주세요.');
                 return;
@@ -129,8 +128,10 @@
                 const exercisesRef = ref(database, 'exercises');
                 await push(exercisesRef, newExercise);
 
-                document.getElementById('duration').value = '';
+                // 폼 초기화
+                duration = '';
                 photo = null;
+                selectedMember = 1;
                 showAddForm = false;
                 alert('운동 기록이 성공적으로 저장되었습니다! 🎉');
                 render();
@@ -159,6 +160,15 @@
                 };
                 reader.readAsDataURL(file);
             }
+        }
+
+        // 입력값 변경 처리
+        function handleMemberChange(value) {
+            selectedMember = parseInt(value);
+        }
+
+        function handleDurationChange(value) {
+            duration = value;
         }
 
         // 멤버별 사진 보기
@@ -270,7 +280,7 @@
                                 <div class="space-y-4">
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 mb-2">운동한 사람</label>
-                                        <select id="memberSelect" onchange="selectedMember = parseInt(this.value)"
+                                        <select onchange="handleMemberChange(this.value)"
                                                 class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
                                             ${members.map(member => 
                                                 `<option value="${member.id}" ${member.id === selectedMember ? 'selected' : ''}>
@@ -282,7 +292,8 @@
 
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 mb-2">운동 시간 (분)</label>
-                                        <input type="number" id="duration" placeholder="예: 30" min="1" max="300"
+                                        <input type="number" value="${duration}" oninput="handleDurationChange(this.value)" 
+                                               placeholder="예: 30" min="1" max="300"
                                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
                                     </div>
 
@@ -436,11 +447,19 @@
         // 전역 함수들
         window.toggleAddForm = () => {
             showAddForm = !showAddForm;
+            // 폼을 열 때마다 초기화
+            if (showAddForm) {
+                selectedMember = 1;
+                duration = '';
+                photo = null;
+            }
             render();
         };
 
         window.addExercise = addExercise;
         window.handlePhotoUpload = handlePhotoUpload;
+        window.handleMemberChange = handleMemberChange;
+        window.handleDurationChange = handleDurationChange;
         window.showMemberPhotos = showMemberPhotos;
         
         window.closePhotos = (event) => {

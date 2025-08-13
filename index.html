@@ -65,19 +65,18 @@
             return week;
         }
 
-        // 지난 주 날짜 계산 (테스트용 - 현재 주를 지난 주로 설정)
         function getLastWeekDates() {
             const today = new Date();
-            const monday = new Date(today.setDate(today.getDate() - today.getDay() + 1));
+            const lastWeekMonday = new Date(today.setDate(today.getDate() - today.getDay() - 6));
             const week = [];
             for (let i = 0; i < 7; i++) {
-                const date = new Date(monday);
-                date.setDate(monday.getDate() + i);
+                const date = new Date(lastWeekMonday);
+                date.setDate(lastWeekMonday.getDate() + i);
                 week.push(date);
             }
             return week;
         }
-
+        
         const weekDates = getWeekDates();
         const lastWeekDates = getLastWeekDates();
 

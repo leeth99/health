@@ -17,7 +17,7 @@
     <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getDatabase, ref, push, onValue, off } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+        import { getDatabase, ref, push, onValue, off, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
 
         // ⚠️ 여기에 Firebase 설정 정보를 입력하세요 ⚠️
         const firebaseConfig = {
@@ -61,6 +61,8 @@
         let selectedDetailRecord = null;
         let photo = null;
         let loading = false;
+        let showDeleteMode = false;
+        let selectedRecordsToDelete = new Set();
         
         // 운동 루틴 관련 상태
         let selectedBodyPart = '가슴';
@@ -415,11 +417,11 @@
         function showMemberPhotos(memberId) {
             const memberExercises = exercises
                 .filter(ex => ex.memberId === memberId)
-                .sort((a, b) => new Date(a.date) - new Date(b.date));
+                .sort((a, b) => new Date(b.date) - new Date(a.date));
             
             const memberRoutines = workoutRoutines
                 .filter(routine => routine.memberId === memberId)
-                .sort((a, b) => new Date(a.date) - new Date(b.date));
+                .sort((a, b) => new Date(b.date) - new Date(a.date));
             
             selectedMemberPhotos = {
                 memberId,
@@ -428,7 +430,70 @@
                 routines: memberRoutines
             };
             showPhotos = true;
+            showDeleteMode = false;
+            selectedRecordsToDelete.clear();
             render();
+        }
+
+        // 삭제 모드 토글
+        function toggleDeleteMode() {
+            showDeleteMode = !showDeleteMode;
+            selectedRecordsToDelete.clear();
+            render();
+        }
+
+        // 운동 기록 선택/해제
+        function toggleRecordSelection(recordId, recordType) {
+            const key = `${recordType}-${recordId}`;
+            if (selectedRecordsToDelete.has(key)) {
+                selectedRecordsToDelete.delete(key);
+            } else {
+                selectedRecordsToDelete.add(key);
+            }
+            render();
+        }
+
+        // 선택된 운동 기록들 삭제
+        async function deleteSelectedRecords() {
+            if (selectedRecordsToDelete.size === 0) {
+                alert('삭제할 운동 기록을 선택해주세요.');
+                return;
+            }
+
+            const confirmed = confirm(`선택한 ${selectedRecordsToDelete.size}개의 운동 기록을 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`);
+            if (!confirmed) return;
+
+            loading = true;
+            render();
+
+            try {
+                const deletePromises = [];
+                
+                for (const key of selectedRecordsToDelete) {
+                    const [recordType, recordId] = key.split('-');
+                    
+                    if (recordType === 'cardio') {
+                        const exerciseRef = ref(database, `exercises/${recordId}`);
+                        deletePromises.push(remove(exerciseRef));
+                    } else if (recordType === 'strength') {
+                        const routineRef = ref(database, `workoutRoutines/${recordId}`);
+                        deletePromises.push(remove(routineRef));
+                    }
+                }
+
+                await Promise.all(deletePromises);
+                
+                selectedRecordsToDelete.clear();
+                showDeleteMode = false;
+                alert('선택한 운동 기록이 성공적으로 삭제되었습니다! 🗑️');
+                
+            } catch (error) {
+                console.error('운동 기록 삭제 실패:', error);
+                alert('운동 기록 삭제에 실패했습니다. 다시 시도해주세요.');
+            } finally {
+                loading = false;
+                render();
+            }
         }
 
         // 렌더링 함수
@@ -704,7 +769,7 @@
             return `
                 <div class="bg-white rounded-xl shadow-lg p-6">
                     <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        ❌ 지난주 할당량 미달성자
+                        ❌ 저번 주 할당량 미달성자
                     </h2>
                     ${failedMembers.length === 0 ? `
                         <div class="text-center py-8 text-green-600">
@@ -945,9 +1010,35 @@
                             <div class="p-6 border-b border-gray-200">
                                 <div class="flex items-center justify-between">
                                     <h2 class="text-2xl font-bold text-gray-800">📷 ${selectedMemberPhotos.memberName}의 운동 기록</h2>
-                                    <button onclick="closePhotos()" class="text-gray-500 hover:text-gray-700 text-2xl font-bold">×</button>
+                                    <div class="flex items-center gap-3">
+                                        ${!showDeleteMode ? `
+                                            <button onclick="toggleDeleteMode()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium text-sm">
+                                                삭제
+                                            </button>
+                                        ` : `
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-sm text-gray-600">${selectedRecordsToDelete.size}개 선택됨</span>
+                                                <button onclick="deleteSelectedRecords()" ${loading || selectedRecordsToDelete.size === 0 ? 'disabled' : ''} 
+                                                        class="bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white px-3 py-2 rounded-lg font-medium text-sm">
+                                                    ${loading ? '⏳ 삭제 중...' : '삭제'}
+                                                </button>
+                                                <button onclick="toggleDeleteMode()" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-lg font-medium text-sm">
+                                                    취소
+                                                </button>
+                                            </div>
+                                        `}
+                                        <button onclick="closePhotos()" class="text-gray-500 hover:text-gray-700 text-2xl font-bold">×</button>
+                                    </div>
                                 </div>
                                 <p class="text-gray-600 mt-1">총 ${selectedMemberPhotos.exercises.length + selectedMemberPhotos.routines.length}개의 운동 기록 📊</p>
+                                ${showDeleteMode ? `
+                                    <div class="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                                        <p class="text-sm text-red-700">
+                                            ⚠️ 삭제할 운동 기록을 클릭하여 선택하세요. 
+                                            삭제된 기록은 복구할 수 없습니다.
+                                        </p>
+                                    </div>
+                                ` : ''}
                             </div>
                             <div class="flex-1 overflow-y-auto p-6">
                                 ${selectedMemberPhotos.exercises.length === 0 && selectedMemberPhotos.routines.length === 0 ? `
@@ -968,23 +1059,39 @@
                                                         <div>
                                                             <h4 class="text-lg font-semibold text-indigo-600 mb-3">🏃 유산소 운동</h4>
                                                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                                ${workouts.cardio.map(exercise => `
-                                                                    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
-                                                                        <img src="${exercise.photoBase64}" alt="${exercise.memberName} 운동 인증" class="w-full h-32 object-cover">
-                                                                        <div class="p-3">
-                                                                            <div class="space-y-1">
-                                                                                <div class="flex justify-between items-center">
-                                                                                    <span class="text-sm font-medium text-gray-800">💪 ${exercise.duration}분</span>
-                                                                                    <span class="text-xs text-gray-500">${new Date(exercise.date).toLocaleTimeString()}</span>
+                                                                ${workouts.cardio.map(exercise => {
+                                                                    const isSelected = selectedRecordsToDelete.has(`cardio-${exercise.firebaseId}`);
+                                                                    return `
+                                                                        <div class="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm relative ${showDeleteMode ? 'cursor-pointer hover:bg-gray-50' : ''} ${isSelected ? 'ring-2 ring-red-500 bg-red-50' : ''}"
+                                                                             ${showDeleteMode ? `onclick="toggleRecordSelection('${exercise.firebaseId}', 'cardio')"` : ''}>
+                                                                            ${showDeleteMode && isSelected ? `
+                                                                                <div class="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold z-10">
+                                                                                    ✓
                                                                                 </div>
-                                                                                <div class="flex justify-between items-center">
-                                                                                    <span class="text-sm text-gray-600">🏃 ${exercise.distance || 0}km</span>
-                                                                                    <span class="text-sm text-gray-600">🔥 ${exercise.calories || 0}kcal</span>
+                                                                            ` : ''}
+                                                                            ${showDeleteMode ? `
+                                                                                <div class="absolute inset-0 bg-black bg-opacity-10 flex items-center justify-center z-5">
+                                                                                    <div class="bg-white rounded-full p-2 shadow-lg">
+                                                                                        <span class="text-red-500 font-bold text-sm">클릭하여 ${isSelected ? '선택 해제' : '선택'}</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ` : ''}
+                                                                            <img src="${exercise.photoBase64}" alt="${exercise.memberName} 운동 인증" class="w-full h-32 object-cover">
+                                                                            <div class="p-3">
+                                                                                <div class="space-y-1">
+                                                                                    <div class="flex justify-between items-center">
+                                                                                        <span class="text-sm font-medium text-gray-800">💪 ${exercise.duration}분</span>
+                                                                                        <span class="text-xs text-gray-500">${new Date(exercise.date).toLocaleTimeString()}</span>
+                                                                                    </div>
+                                                                                    <div class="flex justify-between items-center">
+                                                                                        <span class="text-sm text-gray-600">🏃 ${exercise.distance || 0}km</span>
+                                                                                        <span class="text-sm text-gray-600">🔥 ${exercise.calories || 0}kcal</span>
+                                                                                    </div>
                                                                                 </div>
                                                                             </div>
                                                                         </div>
-                                                                    </div>
-                                                                `).join('')}
+                                                                    `;
+                                                                }).join('')}
                                                             </div>
                                                         </div>
                                                     ` : ''}
@@ -992,32 +1099,48 @@
                                                         <div>
                                                             <h4 class="text-lg font-semibold text-purple-600 mb-3">💪 근력 운동</h4>
                                                             <div class="space-y-3">
-                                                                ${workouts.strength.map(routine => `
-                                                                    <div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                                                                        <div class="flex items-center justify-between mb-2">
-                                                                            <h5 class="text-xl font-bold text-purple-800">${routine.bodyPart}</h5>
-                                                                            <span class="text-xs text-gray-500">${new Date(routine.date).toLocaleTimeString()}</span>
-                                                                        </div>
-                                                                        <div class="space-y-1">
-                                                                            <p class="text-lg text-gray-800 font-medium">${routine.exerciseName}</p>
+                                                                ${workouts.strength.map(routine => {
+                                                                    const isSelected = selectedRecordsToDelete.has(`strength-${routine.firebaseId}`);
+                                                                    return `
+                                                                        <div class="bg-purple-50 border border-purple-200 rounded-lg p-4 relative ${showDeleteMode ? 'cursor-pointer hover:bg-purple-100' : ''} ${isSelected ? 'ring-2 ring-red-500 bg-red-50' : ''}"
+                                                                             ${showDeleteMode ? `onclick="toggleRecordSelection('${routine.firebaseId}', 'strength')"` : ''}>
+                                                                            ${showDeleteMode && isSelected ? `
+                                                                                <div class="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold z-10">
+                                                                                    ✓
+                                                                                </div>
+                                                                            ` : ''}
+                                                                            ${showDeleteMode ? `
+                                                                                <div class="absolute inset-0 bg-black bg-opacity-10 flex items-center justify-center z-5 rounded-lg">
+                                                                                    <div class="bg-white rounded-full px-3 py-1 shadow-lg">
+                                                                                        <span class="text-red-500 font-bold text-sm">클릭하여 ${isSelected ? '선택 해제' : '선택'}</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ` : ''}
+                                                                            <div class="flex items-center justify-between mb-2">
+                                                                                <h5 class="text-xl font-bold text-purple-800">${routine.bodyPart}</h5>
+                                                                                <span class="text-xs text-gray-500">${new Date(routine.date).toLocaleTimeString()}</span>
+                                                                            </div>
                                                                             <div class="space-y-1">
-                                                                                ${routine.setDetails ? routine.setDetails.map((set, index) => `
-                                                                                    <div class="text-sm text-gray-600 flex items-center gap-2">
-                                                                                        <span class="w-12 text-purple-600 font-medium">${index + 1}세트</span>
-                                                                                        <span>🔁 ${set.reps}회</span>
-                                                                                        <span>⚖️ ${set.weight}kg</span>
-                                                                                    </div>
-                                                                                `).join('') : `
-                                                                                    <div class="flex gap-4 text-sm text-gray-600">
-                                                                                        <span>🔢 ${routine.sets || 0}세트</span>
-                                                                                        <span>🔁 ${routine.reps || 0}회</span>
-                                                                                        <span>⚖️ ${routine.weight || 0}kg</span>
-                                                                                    </div>
-                                                                                `}
+                                                                                <p class="text-lg text-gray-800 font-medium">${routine.exerciseName}</p>
+                                                                                <div class="space-y-1">
+                                                                                    ${routine.setDetails ? routine.setDetails.map((set, index) => `
+                                                                                        <div class="text-sm text-gray-600 flex items-center gap-2">
+                                                                                            <span class="w-12 text-purple-600 font-medium">${index + 1}세트</span>
+                                                                                            <span>🔁 ${set.reps}회</span>
+                                                                                            <span>⚖️ ${set.weight}kg</span>
+                                                                                        </div>
+                                                                                    `).join('') : `
+                                                                                        <div class="flex gap-4 text-sm text-gray-600">
+                                                                                            <span>🔢 ${routine.sets || 0}세트</span>
+                                                                                            <span>🔁 ${routine.reps || 0}회</span>
+                                                                                            <span>⚖️ ${routine.weight || 0}kg</span>
+                                                                                        </div>
+                                                                                    `}
+                                                                                </div>
                                                                             </div>
                                                                         </div>
-                                                                    </div>
-                                                                `).join('')}
+                                                                    `;
+                                                                }).join('')}
                                                             </div>
                                                         </div>
                                                     ` : ''}
@@ -1081,11 +1204,16 @@
         window.showMemberPhotos = showMemberPhotos;
         window.showAllRecordsModal = showAllRecordsModal;
         window.showDetailRecord = showDetailRecord;
+        window.toggleDeleteMode = toggleDeleteMode;
+        window.toggleRecordSelection = toggleRecordSelection;
+        window.deleteSelectedRecords = deleteSelectedRecords;
         
         window.closePhotos = (event) => {
             if (event && event.target !== event.currentTarget) return;
             showPhotos = false;
             selectedMemberPhotos = null;
+            showDeleteMode = false;
+            selectedRecordsToDelete.clear();
             render();
         };
 

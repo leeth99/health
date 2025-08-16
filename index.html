@@ -3,23 +3,961 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>운동 기록 앱</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>헬스 웹 앱</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-app-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-database-compat.min.js"></script>
     <style>
-        .loading {
-            animation: pulse 2s infinite;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .step {
+            display: none;
+        }
+
+        .step.active {
+            display: block;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin: 10px;
+            min-width: 120px;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(45deg, #36d1dc, #5b86e5);
+        }
+
+        .btn-success {
+            background: linear-gradient(45deg, #56ab2f, #a8e6cf);
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .input-group input, .input-group select {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .input-group input:focus, .input-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .purpose-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .purpose-card {
+            background: white;
+            border: 3px solid #e1e5e9;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .purpose-card:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .purpose-card.selected {
+            border-color: #667eea;
+            background: linear-gradient(45deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+        }
+
+        .purpose-card .icon {
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
+
+        .user-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .user-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .user-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .user-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .workout-record-btn {
+            background: linear-gradient(45deg, #36d1dc, #5b86e5);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .workout-record-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(54, 209, 220, 0.3);
+        }
+
+        .workout-record-btn:focus {
+            outline: none;
+        }
+
+        .user-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .workout-menu {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .workout-menu-item {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 3px solid transparent;
+        }
+
+        .workout-menu-item:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .workout-menu-item .icon {
+            font-size: 4rem;
+            margin-bottom: 15px;
+        }
+
+        .body-parts {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .body-part {
+            background: white;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .body-part:hover, .body-part.selected {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .sets-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .exercise-name-input {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .exercise-name-input input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .exercise-name-input input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .set-item {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .set-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .set-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .set-number {
+            font-weight: 700;
+            color: #667eea;
+            font-size: 1.1rem;
+        }
+
+        .set-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .set-inputs input {
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        .set-inputs input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .cardio-form {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .image-upload {
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .image-upload:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        .image-upload input {
+            display: none;
+        }
+
+        .back-btn {
+            background: #6c757d;
+            margin-right: 10px;
+        }
+
+        .back-btn:hover {
+            background: #545b62;
+        }
+
+        .remove-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .remove-btn:hover {
+            background: #c82333;
+        }
+
+        .photo-gallery {
+            margin-top: 20px;
+        }
+
+        .gallery-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .report-btn {
+            background: linear-gradient(45deg, #ff6b6b, #ffa726);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .report-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.3);
+        }
+
+        .report-tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .report-tab {
+            flex: 1;
+            padding: 15px 20px;
+            background: #e9ecef;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            color: #6c757d;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .report-tab:hover {
+            background: #dee2e6;
+            color: #495057;
+        }
+
+        .report-tab.active {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .report-content {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            line-height: 1.6;
+            min-height: 400px;
+        }
+
+        .monthly-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .summary-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .summary-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .summary-label {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .cumulative-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card h5 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 8px;
+        }
+
+        .top-exercise {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin: 5px 0;
+            font-weight: 600;
+        }
+
+        .report-section {
+            margin-bottom: 25px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .report-section h4 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 8px;
+        }
+
+        .body-part-count {
+            display: inline-block;
+            margin: 5px 8px;
+            padding: 8px 12px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .body-part-count.gold {
+            background: linear-gradient(45deg, #ffd700, #ffed4e);
+            color: #333;
+        }
+
+        .body-part-count.red {
+            background: linear-gradient(45deg, #dc143c, #ff6b6b);
+            color: white;
+        }
+
+        .weight-increase {
+            background: linear-gradient(45deg, #56ab2f, #a8e6cf);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin: 5px 0;
+            font-weight: 600;
+        }
+
+        .cardio-record {
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: 600;
+            text-align: center;
+            margin: 10px 0;
+        }
+
+        .best-record {
+            background: linear-gradient(45deg, #ffd700, #ffed4e);
+            color: #333;
+        }
+
+        .worst-record {
+            background: linear-gradient(45deg, #ff6b6b, #ff8e8e);
+            color: white;
+        }
+
+        .normal-record {
+            background: linear-gradient(45deg, #36d1dc, #5b86e5);
+            color: white;
+        }
+
+        .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .photo-item {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+            position: relative;
+        }
+
+        .photo-item:hover {
+            transform: scale(1.05);
+        }
+
+        .photo-item:hover .delete-btn {
+            opacity: 1;
+        }
+
+        .photo-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .strength-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            text-align: center;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .strength-item .icon {
+            font-size: 2rem;
+            margin-bottom: 5px;
+        }
+
+        .strength-item .exercise-name {
+            font-size: 0.9rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            width: 100%;
+        }
+
+        .strength-item .body-part {
+            font-size: 0.7rem;
+            opacity: 0.8;
+            margin-top: 2px;
+        }
+
+        .workout-detail {
+            margin-bottom: 20px;
+            border: 1px solid #e1e5e9;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .workout-detail h4 {
+            color: white;
+            margin: 0;
+            padding: 15px;
+            font-size: 1.2rem;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+        }
+
+        .cardio-header {
+            background: linear-gradient(45deg, #36d1dc, #5b86e5) !important;
+        }
+
+        .delete-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(220, 53, 69, 0.9);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            font-size: 12px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .delete-btn:hover {
+            background: rgba(220, 53, 69, 1);
+        }
+
+        .photo-placeholder {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 2rem;
+        }
+
+        .date-group {
+            margin-bottom: 25px;
+        }
+
+        .date-header {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+            padding: 5px 0;
+            border-bottom: 1px solid #e1e5e9;
+        }
+
+        .no-photos {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        /* 모달 스타일 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .modal-close {
+            position: absolute;
+            right: 20px;
+            top: 20px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #666;
+            transition: color 0.3s ease;
+        }
+
+        .modal-close:hover {
+            color: #333;
+        }
+
+        .workout-detail {
+            margin-bottom: 20px;
+        }
+
+        .workout-detail h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+
+        .workout-detail-content {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .set-detail {
+            background: white;
+            padding: 8px 12px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .set-inputs {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+
+            .set-inputs input {
+                padding: 10px;
+                font-size: 14px;
+            }
         }
     </style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-    <div id="app"></div>
+<body>
+    <div class="container">
+        <h1>🏋️ 헬스 웹 앱</h1>
 
-    <!-- Firebase SDK -->
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getDatabase, ref, push, onValue, off, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+        <!-- Step 1: 메인 화면 -->
+        <div id="step1" class="step active">
+            <div style="text-align: center;">
+                <button class="btn" onclick="showAddUser()">👤 사용자 추가</button>
+            </div>
+            <div id="userCards" class="user-cards"></div>
+        </div>
 
-        // ⚠️ 여기에 Firebase 설정 정보를 입력하세요 ⚠️
+        <!-- Step 2: 사용자 이름 입력 -->
+        <div id="step2" class="step">
+            <h2>사용자 정보 입력</h2>
+            <div class="input-group">
+                <label for="userName">이름을 입력하세요:</label>
+                <input type="text" id="userName" placeholder="이름을 입력하세요">
+            </div>
+            <button class="btn back-btn" onclick="showStep('step1')">뒤로</button>
+            <button class="btn" onclick="showPurposeSelection()">다음</button>
+        </div>
+
+        <!-- Step 3: 운동 목적 선택 -->
+        <div id="step3" class="step">
+            <h2>운동 목적을 선택하세요</h2>
+            <div class="purpose-options">
+                <div class="purpose-card" onclick="selectPurpose('근비대')" data-purpose="근비대">
+                    <div class="icon">💪</div>
+                    <h3>근비대</h3>
+                    <p>근육량 증가</p>
+                </div>
+                <div class="purpose-card" onclick="selectPurpose('다이어트')" data-purpose="다이어트">
+                    <div class="icon">🔥</div>
+                    <h3>다이어트</h3>
+                    <p>체중 감량</p>
+                </div>
+                <div class="purpose-card" onclick="selectPurpose('건강•재활')" data-purpose="건강•재활">
+                    <div class="icon">❤️</div>
+                    <h3>건강•재활</h3>
+                    <p>건강 증진</p>
+                </div>
+            </div>
+            <button class="btn back-btn" onclick="showStep('step2')">뒤로</button>
+            <button class="btn btn-success" onclick="createUser()">사용자 생성</button>
+        </div>
+
+        <!-- Step 4: 운동 메뉴 선택 -->
+        <div id="step4" class="step">
+            <h2 id="currentUserName">사용자</h2>
+            <div class="workout-menu">
+                <div class="workout-menu-item" onclick="showCardio()">
+                    <div class="icon">🏃</div>
+                    <h3>유산소 운동</h3>
+                </div>
+                <div class="workout-menu-item" onclick="showStrength()">
+                    <div class="icon">🏋️</div>
+                    <h3>근력 운동</h3>
+                </div>
+            </div>
+            <button class="btn back-btn" onclick="showStep('step1')">홈으로</button>
+        </div>
+
+        <!-- Step 5: 근력운동 부위 선택 -->
+        <div id="step5" class="step">
+            <h2>운동 부위 선택</h2>
+            <div class="body-parts">
+                <div class="body-part" onclick="selectBodyPart('가슴')" data-part="가슴">가슴</div>
+                <div class="body-part" onclick="selectBodyPart('등')" data-part="등">등</div>
+                <div class="body-part" onclick="selectBodyPart('어깨')" data-part="어깨">어깨</div>
+                <div class="body-part" onclick="selectBodyPart('이두')" data-part="이두">이두</div>
+                <div class="body-part" onclick="selectBodyPart('삼두')" data-part="삼두">삼두</div>
+                <div class="body-part" onclick="selectBodyPart('복부')" data-part="복부">복부</div>
+                <div class="body-part" onclick="selectBodyPart('하체')" data-part="하체">하체</div>
+            </div>
+            <div id="strengthWorkout" style="display: none;">
+                <h3>근력 운동 기록</h3>
+                <div class="sets-container">
+                    <div class="exercise-name-input">
+                        <label for="exerciseName">운동 이름:</label>
+                        <input type="text" id="exerciseName" placeholder="예: 벤치프레스, 스쿼트 등">
+                    </div>
+                    <div id="setsContainer"></div>
+                    <button class="btn" onclick="addSet()">세트 추가</button>
+                </div>
+                <button class="btn btn-success" onclick="saveStrengthWorkout()">운동 저장</button>
+            </div>
+            <button class="btn back-btn" onclick="showStep('step4')">뒤로</button>
+        </div>
+
+        <!-- Step 6: 유산소 운동 -->
+        <div id="step6" class="step">
+            <h2>유산소 운동 기록</h2>
+            <div class="cardio-form">
+                <div class="input-group">
+                    <label for="cardioTime">시간 (분):</label>
+                    <input type="number" id="cardioTime" placeholder="운동 시간">
+                </div>
+                <div class="input-group">
+                    <label for="cardioDistance">거리 (km):</label>
+                    <input type="number" id="cardioDistance" placeholder="이동 거리" step="0.1">
+                </div>
+                <div class="input-group">
+                    <label for="cardioCalories">칼로리:</label>
+                    <input type="number" id="cardioCalories" placeholder="소모 칼로리">
+                </div>
+                <div class="input-group">
+                    <label>운동 사진:</label>
+                    <div class="image-upload" onclick="document.getElementById('imageInput').click()">
+                        <input type="file" id="imageInput" accept="image/*" onchange="handleImageUpload(event)">
+                        <div id="imagePreview">
+                            <p>📷 사진을 업로드하세요</p>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-success" onclick="saveCardioWorkout()">운동 저장</button>
+            </div>
+            <button class="btn back-btn" onclick="showStep('step4')">뒤로</button>
+        </div>
+
+        <!-- Step 7: 사진 갤러리 -->
+        <div id="step7" class="step">
+            <div class="gallery-header">
+                <h2 id="galleryUserName">사용자 갤러리</h2>
+                <button class="report-btn" onclick="showWorkoutReport()">📊 운동 리포트</button>
+            </div>
+            <div id="photoGalleryContainer"></div>
+            <button class="btn back-btn" onclick="showStep('step1')">홈으로</button>
+        </div>
+
+        <!-- Step 8: 운동 리포트 -->
+        <div id="step8" class="step">
+            <div class="gallery-header">
+                <h2 id="reportUserName">운동 리포트</h2>
+                <button class="btn back-btn" onclick="showStep('step7')">돌아가기</button>
+            </div>
+            
+            <div class="report-tabs">
+                <button class="report-tab active" onclick="switchReportTab('weekly')">📅 주간</button>
+                <button class="report-tab" onclick="switchReportTab('monthly')">📊 월간</button>
+                <button class="report-tab" onclick="switchReportTab('cumulative')">📈 누적</button>
+            </div>
+            
+            <div id="reportContainer"></div>
+        </div>
+
+        <!-- 운동 상세 모달 -->
+        <div id="workoutModal" class="modal">
+            <div class="modal-content">
+                <span class="modal-close" onclick="closeWorkoutModal()">&times;</span>
+                <div id="workoutDetails"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase 설정 (본인의 Firebase 프로젝트 설정으로 교체하세요)
         const firebaseConfig = {
             apiKey: "AIzaSyDvIxDWBCLCJUoNmCDgb7rpGcCwvt4GaBI",
             authDomain: "camtech-health.firebaseapp.com",
@@ -30,1231 +968,1184 @@
         };
 
         // Firebase 초기화
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        let currentUser = null;
+        let selectedPurpose = null;
+        let selectedBodyPart = null;
+        let uploadedImage = null;
 
-        // 멤버 정보
-        const members = [
-            { id: 1, name: '백소진', color: 'bg-blue-500' },
-            { id: 2, name: '이원렬', color: 'bg-pink-500' },
-            { id: 3, name: '이태형', color: 'bg-green-500' },
-            { id: 4, name: '지홍규', color: 'bg-purple-500' }
-        ];
+        // Firebase 데이터베이스 함수들
+        function saveUserToFirebase(user) {
+            return database.ref('users/' + user.id).set(user);
+        }
 
-        // 운동 부위 목록
-        const bodyParts = ['가슴', '등', '이두', '삼두', '어깨', '하체'];
+        function getUsersFromFirebase() {
+            return database.ref('users').once('value').then(snapshot => {
+                const users = [];
+                snapshot.forEach(childSnapshot => {
+                    users.push(childSnapshot.val());
+                });
+                return users;
+            });
+        }
 
-        // 전역 상태
-        let exercises = [];
-        let workoutRoutines = [];
-        let selectedMember = 1;
-        let duration = '';
-        let distance = '';
-        let calories = '';
-        let showAddForm = false;
-        let showAddRoutineForm = false;
-        let showPhotos = false;
-        let showAllRecords = false;
-        let showDetailPopup = false;
-        let selectedMemberPhotos = null;
-        let selectedRecordForMember = 1;
-        let selectedDetailRecord = null;
-        let photo = null;
-        let loading = false;
-        let showDeleteMode = false;
-        let selectedRecordsToDelete = new Set();
-        
-        // 운동 루틴 관련 상태
-        let selectedBodyPart = '가슴';
-        let exerciseName = '';
-        let setDetails = [];
+        function updateUserInFirebase(userId, updates) {
+            return database.ref('users/' + userId).update(updates);
+        }
 
-        // 날짜 계산 함수들
-        function getWeekDates() {
-            const today = new Date();
-            const monday = new Date(today.setDate(today.getDate() - today.getDay() + 1));
-            const week = [];
-            for (let i = 0; i < 7; i++) {
-                const date = new Date(monday);
-                date.setDate(monday.getDate() + i);
-                week.push(date);
+        function deleteUserFromFirebase(userId) {
+            return database.ref('users/' + userId).remove();
+        }
+
+        // 페이지 로드 시 사용자 목록 불러오기
+        window.onload = function() {
+            loadUsers();
+        };
+
+        function showStep(stepId) {
+            document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
+            document.getElementById(stepId).classList.add('active');
+        }
+
+        function showAddUser() {
+            showStep('step2');
+        }
+
+        function showPurposeSelection() {
+            const userName = document.getElementById('userName').value.trim();
+            if (!userName) {
+                alert('이름을 입력해주세요!');
+                return;
             }
-            return week;
+            showStep('step3');
         }
 
-        function getLastWeekDates() {
-            const today = new Date();
-            const lastWeekMonday = new Date(today.setDate(today.getDate() - today.getDay() - 6));
-            const week = [];
-            for (let i = 0; i < 7; i++) {
-                const date = new Date(lastWeekMonday);
-                date.setDate(lastWeekMonday.getDate() + i);
-                week.push(date);
-            }
-            return week;
-        }
-
-        const weekDates = getWeekDates();
-        const lastWeekDates = getLastWeekDates();
-
-        // 운동 횟수 및 칼로리 계산
-        function getWeeklyCount(memberId) {
-            const thisWeekStart = weekDates[0];
-            const thisWeekEnd = new Date(weekDates[6]);
-            thisWeekEnd.setHours(23, 59, 59);
-
-            return exercises.filter(ex => 
-                ex.memberId === memberId && 
-                new Date(ex.date) >= thisWeekStart && 
-                new Date(ex.date) <= thisWeekEnd
-            ).length;
-        }
-
-        function getWeeklyCalories(memberId) {
-            const thisWeekStart = weekDates[0];
-            const thisWeekEnd = new Date(weekDates[6]);
-            thisWeekEnd.setHours(23, 59, 59);
-
-            return exercises
-                .filter(ex => 
-                    ex.memberId === memberId && 
-                    new Date(ex.date) >= thisWeekStart && 
-                    new Date(ex.date) <= thisWeekEnd
-                )
-                .reduce((total, ex) => total + (ex.calories || 0), 0);
-        }
-
-        function getLastWeeklyCount(memberId) {
-            const lastWeekStart = lastWeekDates[0];
-            const lastWeekEnd = new Date(lastWeekDates[6]);
-            lastWeekEnd.setHours(23, 59, 59);
-
-            return exercises.filter(ex => 
-                ex.memberId === memberId && 
-                new Date(ex.date) >= lastWeekStart && 
-                new Date(ex.date) <= lastWeekEnd
-            ).length;
-        }
-
-        // 전체 운동 기록 관련 함수들
-        function showAllRecordsModal() {
-            showAllRecords = true;
-            render();
-        }
-
-        function getAllRecordsForMember(memberId) {
-            const memberExercises = exercises
-                .filter(ex => ex.memberId === memberId)
-                .map(ex => Object.assign({}, ex, { type: 'cardio' }));
-            
-            const memberRoutines = workoutRoutines
-                .filter(routine => routine.memberId === memberId)
-                .map(routine => Object.assign({}, routine, { type: 'strength' }));
-            
-            const allRecords = memberExercises.concat(memberRoutines)
-                .sort((a, b) => new Date(b.date) - new Date(a.date));
-            
-            return allRecords;
-        }
-
-        function groupRecordsByDate(records) {
-            const groups = {};
-            records.forEach(record => {
-                const date = new Date(record.date).toLocaleDateString();
-                if (!groups[date]) {
-                    groups[date] = { cardio: [], strength: [] };
-                }
-                if (record.type === 'cardio') {
-                    groups[date].cardio.push(record);
-                } else {
-                    groups[date].strength.push(record);
-                }
+        function selectPurpose(purpose) {
+            selectedPurpose = purpose;
+            document.querySelectorAll('.purpose-card').forEach(card => {
+                card.classList.remove('selected');
             });
-            return groups;
+            document.querySelector(`[data-purpose="${purpose}"]`).classList.add('selected');
         }
 
-        function showDetailRecord(recordIndex) {
-            const allRecords = getAllRecordsForMember(selectedRecordForMember);
-            selectedDetailRecord = allRecords[recordIndex];
-            showDetailPopup = true;
-            render();
-        }
-
-        // 멤버 변경 함수 추가
-        function handleRecordMemberChange(value) {
-            selectedRecordForMember = parseInt(value);
-            render();
-        }
-
-        // 특정 멤버와 부위의 운동 기록 분석
-        function getBodyPartRecords(memberId, bodyPart) {
-            const memberRoutines = workoutRoutines.filter(routine => 
-                routine.memberId === memberId && routine.bodyPart === bodyPart
-            );
-
-            const exerciseStats = {};
-            
-            memberRoutines.forEach(routine => {
-                const exerciseName = routine.exerciseName;
-                if (!exerciseStats[exerciseName]) {
-                    exerciseStats[exerciseName] = [];
-                }
-                
-                if (routine.setDetails && routine.setDetails.length > 0) {
-                    routine.setDetails.forEach(set => {
-                        if (set.weight && set.reps) {
-                            exerciseStats[exerciseName].push({
-                                weight: parseFloat(set.weight),
-                                reps: parseInt(set.reps),
-                                date: routine.date
-                            });
-                        }
-                    });
-                } else if (routine.weight && routine.reps) {
-                    exerciseStats[exerciseName].push({
-                        weight: parseFloat(routine.weight),
-                        reps: parseInt(routine.reps),
-                        date: routine.date
-                    });
-                }
-            });
-
-            const results = [];
-            Object.entries(exerciseStats).forEach(([exerciseName, records]) => {
-                if (records.length > 0) {
-                    const maxWeightRecord = records.reduce((max, current) => 
-                        current.weight > max.weight ? current : max
-                    );
-                    results.push({
-                        exerciseName,
-                        maxWeight: maxWeightRecord.weight,
-                        repsAtMaxWeight: maxWeightRecord.reps,
-                        totalSessions: new Set(records.map(r => r.date.split('T')[0])).size
-                    });
-                }
-            });
-
-            return results.sort((a, b) => b.maxWeight - a.maxWeight);
-        }
-
-        // 날짜별로 운동 기록 그룹화
-        function groupAllWorkoutsByDate(exercises, routines) {
-            const groups = {};
-            
-            exercises.forEach(exercise => {
-                const date = new Date(exercise.date).toLocaleDateString();
-                if (!groups[date]) {
-                    groups[date] = { cardio: [], strength: [] };
-                }
-                groups[date].cardio.push(exercise);
-            });
-            
-            routines.forEach(routine => {
-                const date = new Date(routine.date).toLocaleDateString();
-                if (!groups[date]) {
-                    groups[date] = { cardio: [], strength: [] };
-                }
-                groups[date].strength.push(routine);
-            });
-            
-            return groups;
-        }
-
-        // 운동 루틴 추가
-        async function addWorkoutRoutine() {
-            if (!exerciseName || setDetails.length === 0) {
-                alert('운동 이름과 최소 1세트를 입력해주세요.');
+        function createUser() {
+            const userName = document.getElementById('userName').value.trim();
+            if (!userName || !selectedPurpose) {
+                alert('모든 정보를 입력해주세요!');
                 return;
             }
 
-            const incompleteSet = setDetails.find(set => !set.reps || !set.weight);
-            if (incompleteSet) {
-                alert('모든 세트의 횟수와 무게를 입력해주세요.');
-                return;
-            }
-
-            loading = true;
-            render();
-
-            try {
-                const newRoutine = {
-                    memberId: selectedMember,
-                    memberName: members.find(m => m.id === selectedMember).name,
-                    date: new Date().toISOString(),
-                    bodyPart: selectedBodyPart,
-                    exerciseName: exerciseName,
-                    setDetails: setDetails,
-                    totalSets: setDetails.length,
-                    timestamp: Date.now()
-                };
-
-                const routinesRef = ref(database, 'workoutRoutines');
-                await push(routinesRef, newRoutine);
-
-                selectedBodyPart = '가슴';
-                exerciseName = '';
-                setDetails = [];
-                selectedMember = 1;
-                showAddRoutineForm = false;
-                alert('운동 루틴이 성공적으로 저장되었습니다! 💪');
-                render();
-            } catch (error) {
-                console.error('운동 루틴 저장 실패:', error);
-                alert('운동 루틴 저장에 실패했습니다. 다시 시도해주세요.');
-            } finally {
-                loading = false;
-                render();
-            }
-        }
-
-        // 운동 기록 추가
-        async function addExercise() {
-            if (!duration || !distance || !calories || !photo) {
-                alert('모든 항목을 입력해주세요. (운동 시간, 거리, 칼로리, 사진)');
-                return;
-            }
-
-            loading = true;
-            render();
-
-            try {
-                const newExercise = {
-                    memberId: selectedMember,
-                    memberName: members.find(m => m.id === selectedMember).name,
-                    date: new Date().toISOString(),
-                    duration: parseInt(duration),
-                    distance: parseFloat(distance),
-                    calories: parseInt(calories),
-                    photoBase64: photo,
-                    timestamp: Date.now()
-                };
-
-                const exercisesRef = ref(database, 'exercises');
-                await push(exercisesRef, newExercise);
-
-                duration = '';
-                distance = '';
-                calories = '';
-                photo = null;
-                selectedMember = 1;
-                showAddForm = false;
-                alert('운동 기록이 성공적으로 저장되었습니다! 🎉');
-                render();
-            } catch (error) {
-                console.error('운동 기록 저장 실패:', error);
-                alert('운동 기록 저장에 실패했습니다. 다시 시도해주세요.');
-            } finally {
-                loading = false;
-                render();
-            }
-        }
-
-        // 사진 업로드 처리
-        function handlePhotoUpload(event) {
-            const file = event.target.files[0];
-            if (file) {
-                if (file.size > 5 * 1024 * 1024) {
-                    alert('파일 크기는 5MB 이하로 해주세요.');
-                    return;
-                }
-                
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    photo = e.target.result;
-                    render();
-                };
-                reader.readAsDataURL(file);
-            }
-        }
-
-        // 입력값 변경 처리
-        function handleMemberChange(value) {
-            selectedMember = parseInt(value);
-            render();
-        }
-
-        function handleDurationChange(value) {
-            duration = value;
-        }
-
-        function handleDistanceChange(value) {
-            distance = value;
-        }
-
-        function handleCaloriesChange(value) {
-            calories = value;
-        }
-
-        function handleBodyPartChange(value) {
-            selectedBodyPart = value;
-            render();
-        }
-
-        function handleExerciseNameChange(value) {
-            exerciseName = value;
-        }
-
-        // 세트 관리 함수들
-        function addNewSet() {
-            setDetails.push({ reps: '', weight: '' });
-            render();
-        }
-
-        function removeSet(index) {
-            setDetails.splice(index, 1);
-            render();
-        }
-
-        function updateSetReps(index, value) {
-            setDetails[index].reps = value;
-        }
-
-        function updateSetWeight(index, value) {
-            setDetails[index].weight = value;
-        }
-
-        // 멤버별 사진 보기
-        function showMemberPhotos(memberId) {
-            const memberExercises = exercises
-                .filter(ex => ex.memberId === memberId)
-                .sort((a, b) => new Date(b.date) - new Date(a.date));
-            
-            const memberRoutines = workoutRoutines
-                .filter(routine => routine.memberId === memberId)
-                .sort((a, b) => new Date(b.date) - new Date(a.date));
-            
-            selectedMemberPhotos = {
-                memberId,
-                memberName: members.find(m => m.id === memberId).name,
-                exercises: memberExercises,
-                routines: memberRoutines
+            const newUser = {
+                id: Date.now().toString(),
+                name: userName,
+                purpose: selectedPurpose,
+                weeklyWorkouts: 0,
+                weeklyCalories: 0,
+                weeklyBodyParts: [],
+                workoutHistory: []
             };
-            showPhotos = true;
-            showDeleteMode = false;
-            selectedRecordsToDelete.clear();
-            render();
+
+            // Firebase에 사용자 저장
+            saveUserToFirebase(newUser)
+                .then(() => {
+                    alert('사용자가 생성되었습니다!');
+                    
+                    // 입력 필드 초기화
+                    document.getElementById('userName').value = '';
+                    selectedPurpose = null;
+                    document.querySelectorAll('.purpose-card').forEach(card => {
+                        card.classList.remove('selected');
+                    });
+
+                    // 홈으로 돌아가기
+                    showStep('step1');
+                    loadUsers();
+                })
+                .catch(error => {
+                    console.error('사용자 생성 오류:', error);
+                    alert('사용자 생성에 실패했습니다.');
+                });
         }
 
-        // 삭제 모드 토글
-        function toggleDeleteMode() {
-            showDeleteMode = !showDeleteMode;
-            selectedRecordsToDelete.clear();
-            render();
+        function loadUsers() {
+            getUsersFromFirebase()
+                .then(users => {
+                    const userCardsContainer = document.getElementById('userCards');
+                    userCardsContainer.innerHTML = '';
+                    
+                    if (users.length === 0) {
+                        userCardsContainer.innerHTML = '<div class="no-photos">등록된 사용자가 없습니다.</div>';
+                        return;
+                    }
+                    
+                    users.forEach(user => {
+                        const userCard = document.createElement('div');
+                        userCard.className = 'user-card';
+                        userCard.onclick = (e) => {
+                            if (!e.target.classList.contains('workout-record-btn')) {
+                                showPhotoGallery(user);
+                            }
+                        };
+                        
+                        // 이번 주 운동 횟수 계산 (같은 날은 1회로 계산)
+                        const weeklyWorkouts = calculateWeeklyWorkouts(user.workoutHistory || []);
+                        
+                        userCard.innerHTML = `
+                            <div class="user-card-header">
+                                <h3 style="color: #333; font-size: 1.5rem; margin: 0;">${user.name}</h3>
+                                <button class="workout-record-btn" onclick="event.stopPropagation(); selectUserForWorkout('${user.id}')">기록하기</button>
+                            </div>
+                            <div class="user-stats">
+                                <div class="stat">
+                                    <div class="stat-value">${weeklyWorkouts}</div>
+                                    <div class="stat-label">이번 주 운동</div>
+                                </div>
+                                <div class="stat">
+                                    <div class="stat-value">${user.weeklyCalories || 0}</div>
+                                    <div class="stat-label">소모 칼로리</div>
+                                </div>
+                            </div>
+                        `;
+                        
+                        userCardsContainer.appendChild(userCard);
+                    });
+                })
+                .catch(error => {
+                    console.error('사용자 로드 오류:', error);
+                    const userCardsContainer = document.getElementById('userCards');
+                    userCardsContainer.innerHTML = '<div class="no-photos">사용자 정보를 불러오는데 실패했습니다.</div>';
+                });
         }
 
-        // 운동 기록 선택/해제
-        function toggleRecordSelection(recordId, recordType) {
-            const key = `${recordType}-${recordId}`;
-            if (selectedRecordsToDelete.has(key)) {
-                selectedRecordsToDelete.delete(key);
-            } else {
-                selectedRecordsToDelete.add(key);
-            }
-            render();
+        function calculateWeeklyWorkouts(workoutHistory) {
+            const today = new Date();
+            const oneWeekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+            
+            // 이번 주 운동 기록들을 날짜별로 그룹화
+            const workoutDates = new Set();
+            
+            workoutHistory.forEach(workout => {
+                const workoutDate = new Date(workout.date);
+                if (workoutDate >= oneWeekAgo && workoutDate <= today) {
+                    // 같은 날짜로 그룹화 (시간 무시)
+                    const dateOnly = workoutDate.toDateString();
+                    workoutDates.add(dateOnly);
+                }
+            });
+            
+            return workoutDates.size;
         }
 
-        // 선택된 운동 기록들 삭제
-        async function deleteSelectedRecords() {
-            if (selectedRecordsToDelete.size === 0) {
-                alert('삭제할 운동 기록을 선택해주세요.');
+        function selectUserForWorkout(userId) {
+            getUsersFromFirebase()
+                .then(users => {
+                    const user = users.find(u => u.id === userId);
+                    if (user) {
+                        selectUser(user);
+                    }
+                })
+                .catch(error => {
+                    console.error('사용자 선택 오류:', error);
+                    alert('사용자 정보를 불러오는데 실패했습니다.');
+                });
+        }
+
+        function selectUser(user) {
+            currentUser = user;
+            document.getElementById('currentUserName').textContent = `${user.name}님의 운동`;
+            showStep('step4');
+        }
+
+        function showCardio() {
+            showStep('step6');
+        }
+
+        function showStrength() {
+            showStep('step5');
+        }
+
+        function selectBodyPart(part) {
+            selectedBodyPart = part;
+            document.querySelectorAll('.body-part').forEach(bp => {
+                bp.classList.remove('selected');
+            });
+            document.querySelector(`[data-part="${part}"]`).classList.add('selected');
+            
+            document.getElementById('strengthWorkout').style.display = 'block';
+            document.getElementById('setsContainer').innerHTML = '';
+            document.getElementById('exerciseName').value = '';
+            addSet(); // 첫 번째 세트 자동 추가
+        }
+
+        function addSet() {
+            const setsContainer = document.getElementById('setsContainer');
+            const setNumber = setsContainer.children.length + 1;
+            
+            const setItem = document.createElement('div');
+            setItem.className = 'set-item';
+            setItem.innerHTML = `
+                <div class="set-header">
+                    <span class="set-number">${setNumber}세트</span>
+                    <button class="remove-btn" onclick="removeSet(this)">삭제</button>
+                </div>
+                <div class="set-inputs">
+                    <input type="number" placeholder="무게(kg)" class="weight" step="0.5">
+                    <input type="number" placeholder="횟수" class="reps">
+                </div>
+            `;
+            
+            setsContainer.appendChild(setItem);
+        }
+
+        function removeSet(button) {
+            const setItem = button.closest('.set-item');
+            setItem.remove();
+            
+            // 세트 번호 재정렬
+            const setsContainer = document.getElementById('setsContainer');
+            const setItems = setsContainer.querySelectorAll('.set-item');
+            setItems.forEach((item, index) => {
+                const setNumber = item.querySelector('.set-number');
+                setNumber.textContent = `${index + 1}세트`;
+            });
+        }
+
+        function saveStrengthWorkout() {
+            if (!currentUser || !selectedBodyPart) {
+                alert('사용자와 운동 부위를 선택해주세요!');
                 return;
             }
 
-            const confirmed = confirm(`선택한 ${selectedRecordsToDelete.size}개의 운동 기록을 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`);
-            if (!confirmed) return;
-
-            loading = true;
-            render();
-
-            try {
-                const deletePromises = [];
-                
-                for (const key of selectedRecordsToDelete) {
-                    const [recordType, recordId] = key.split('-');
-                    
-                    if (recordType === 'cardio') {
-                        const exerciseRef = ref(database, `exercises/${recordId}`);
-                        deletePromises.push(remove(exerciseRef));
-                    } else if (recordType === 'strength') {
-                        const routineRef = ref(database, `workoutRoutines/${recordId}`);
-                        deletePromises.push(remove(routineRef));
-                    }
-                }
-
-                await Promise.all(deletePromises);
-                
-                selectedRecordsToDelete.clear();
-                showDeleteMode = false;
-                alert('선택한 운동 기록이 성공적으로 삭제되었습니다! 🗑️');
-                
-            } catch (error) {
-                console.error('운동 기록 삭제 실패:', error);
-                alert('운동 기록 삭제에 실패했습니다. 다시 시도해주세요.');
-            } finally {
-                loading = false;
-                render();
+            const exerciseName = document.getElementById('exerciseName').value.trim();
+            if (!exerciseName) {
+                alert('운동 이름을 입력해주세요!');
+                return;
             }
-        }
 
-        // 렌더링 함수
-        function render() {
-            const app = document.getElementById('app');
+            const sets = [];
+            const setItems = document.querySelectorAll('.set-item');
             
-            const memberOptions = members.map(member => 
-                `<option value="${member.id}" ${member.id === selectedMember ? 'selected' : ''}>${member.name}</option>`
-            ).join('');
-
-            const bodyPartOptions = bodyParts.map(part => 
-                `<option value="${part}" ${part === selectedBodyPart ? 'selected' : ''}>${part}</option>`
-            ).join('');
-
-            app.innerHTML = `
-                <div class="max-w-4xl mx-auto p-4">
-                    <!-- 헤더 -->
-                    <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-3 cursor-pointer hover:text-indigo-600 transition-colors"
-                                    onclick="showAllRecordsModal()">
-                                    🏆 운동 기록
-                                </h1>
-                                <p class="text-gray-600 mt-2">주 4회 운동 목표 달성하기! 💪</p>
-                            </div>
-                            <div class="text-right">
-                                <div class="text-sm text-gray-500">이번 주</div>
-                                <div class="text-lg font-semibold text-indigo-600">
-                                    ${weekDates[0].toLocaleDateString()} ~ ${weekDates[6].toLocaleDateString()}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="mt-4 flex items-center gap-2">
-                            <div></div>
-                        </div>
-                    </div>
-
-                    <!-- 멤버별 진행상황 -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                        ${members.map(member => {
-                            const weeklyCount = getWeeklyCount(member.id);
-                            const weeklyCalories = getWeeklyCalories(member.id);
-                            const isCompleted = weeklyCount >= 4;
-                            return `
-                                <div class="${member.color} rounded-xl p-4 text-white shadow-lg cursor-pointer hover:shadow-xl hover:scale-105 transition-all"
-                                     onclick="showMemberPhotos(${member.id})">
-                                    <div class="flex items-center justify-between mb-3">
-                                        <h3 class="font-bold text-lg">${member.name}</h3>
-                                        <span class="text-2xl">${isCompleted ? '✅' : '🎯'}</span>
-                                    </div>
-                                    <div class="space-y-2">
-                                        <div class="flex justify-between items-center">
-                                            <span>이번 주 운동</span>
-                                            <span class="font-bold text-xl">${weeklyCount}/4</span>
-                                        </div>
-                                        <div class="w-full bg-white bg-opacity-30 rounded-full h-3">
-                                            <div class="bg-white h-3 rounded-full transition-all duration-300"
-                                                 style="width: ${Math.min((weeklyCount / 4) * 100, 100)}%"></div>
-                                        </div>
-                                        <div class="text-sm opacity-90">
-                                            ${isCompleted ? '목표 달성! 🎉' : `${4 - weeklyCount}회 남음`}
-                                        </div>
-                                        <div class="text-sm opacity-90 border-t border-white border-opacity-30 pt-2">
-                                            🔥 칼로리: ${weeklyCalories.toLocaleString()}kcal
-                                        </div>
-                                        <div class="text-xs opacity-75 mt-2 border-t border-white border-opacity-30 pt-2">
-                                            📸 클릭하여 운동 사진 보기
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-
-                    <!-- 운동 추가 버튼들 -->
-                    <div class="flex gap-4 justify-center mb-6">
-                        <button onclick="toggleAddForm()" 
-                                class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all hover:scale-105 flex items-center gap-2">
-                            🏃 유산소 운동 추가
-                        </button>
-                        <button onclick="toggleAddRoutineForm()" 
-                                class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all hover:scale-105 flex items-center gap-2">
-                            💪 근력 운동 추가
-                        </button>
-                    </div>
-
-                    ${renderForms()}
-                    ${renderRecordsSection()}
-                </div>
-
-                ${renderModals()}
-            `;
-        }
-
-        function renderForms() {
-            let formHTML = '';
-
-            if (showAddForm) {
-                formHTML += `
-                    <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
-                        <h2 class="text-xl font-bold text-gray-800 mb-4">🏃 유산소 운동 인증하기</h2>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">운동한 사람</label>
-                                    <select onchange="handleMemberChange(this.value)" class="w-full p-3 border border-gray-300 rounded-lg">
-                                        ${members.map(member => 
-                                            `<option value="${member.id}" ${member.id === selectedMember ? 'selected' : ''}>${member.name}</option>`
-                                        ).join('')}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">운동 시간 (분)</label>
-                                    <input type="number" value="${duration}" oninput="handleDurationChange(this.value)" 
-                                           placeholder="예: 30" min="1" max="300" class="w-full p-3 border border-gray-300 rounded-lg">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">거리 (km)</label>
-                                    <input type="number" step="0.1" value="${distance}" oninput="handleDistanceChange(this.value)" 
-                                           placeholder="예: 3.5" min="0.1" max="50" class="w-full p-3 border border-gray-300 rounded-lg">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">소모 칼로리 (kcal)</label>
-                                    <input type="number" value="${calories}" oninput="handleCaloriesChange(this.value)" 
-                                           placeholder="예: 250" min="1" max="2000" class="w-full p-3 border border-gray-300 rounded-lg">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">러닝머신 인증 사진</label>
-                                    <input type="file" accept="image/*" onchange="handlePhotoUpload(event)" class="w-full p-3 border border-gray-300 rounded-lg">
-                                </div>
-                            </div>
-                            <div>
-                                ${photo ? `<img src="${photo}" alt="운동 인증" class="w-full h-48 object-cover rounded-lg">` : ''}
-                            </div>
-                        </div>
-                        <div class="flex gap-3 mt-6">
-                            <button onclick="addExercise()" ${loading ? 'disabled' : ''} class="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-6 py-3 rounded-lg font-semibold flex-1">
-                                ${loading ? '⏳ 저장 중...' : '✅ 인증 완료'}
-                            </button>
-                            <button onclick="toggleAddForm()" class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold">취소</button>
-                        </div>
-                    </div>
-                `;
-            }
-
-            if (showAddRoutineForm) {
-                const records = getBodyPartRecords(selectedMember, selectedBodyPart);
+            setItems.forEach((setItem, index) => {
+                const weight = setItem.querySelector('.weight').value;
+                const reps = setItem.querySelector('.reps').value;
                 
-                formHTML += `
-                    <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
-                        <h2 class="text-xl font-bold text-gray-800 mb-4">💪 근력 운동 루틴 추가하기</h2>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">운동한 사람</label>
-                                    <select onchange="handleMemberChange(this.value)" class="w-full p-3 border border-gray-300 rounded-lg">
-                                        ${members.map(member => 
-                                            `<option value="${member.id}" ${member.id === selectedMember ? 'selected' : ''}>${member.name}</option>`
-                                        ).join('')}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">운동 부위</label>
-                                    <select onchange="handleBodyPartChange(this.value)" class="w-full p-3 border border-gray-300 rounded-lg">
-                                        ${bodyParts.map(part => 
-                                            `<option value="${part}" ${part === selectedBodyPart ? 'selected' : ''}>${part}</option>`
-                                        ).join('')}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">운동 이름</label>
-                                    <input type="text" value="${exerciseName}" oninput="handleExerciseNameChange(this.value)" 
-                                           placeholder="예: 벤치프레스, 스쿼트" class="w-full p-3 border border-gray-300 rounded-lg">
-                                </div>
-                                <div>
-                                    <div class="flex items-center justify-between mb-3">
-                                        <label class="block text-sm font-medium text-gray-700">세트별 상세 정보</label>
-                                        <button type="button" onclick="addNewSet()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm">+ 세트 추가</button>
+                if (weight && reps) {
+                    sets.push({
+                        setNumber: index + 1,
+                        weight: parseFloat(weight),
+                        reps: parseInt(reps)
+                    });
+                }
+            });
+
+            if (sets.length === 0) {
+                alert('최소 한 세트는 입력해주세요!');
+                return;
+            }
+
+            // 운동 기록 저장
+            const workout = {
+                id: Date.now().toString(),
+                type: 'strength',
+                date: new Date().toISOString(),
+                bodyPart: selectedBodyPart,
+                exercise: exerciseName,
+                sets: sets
+            };
+
+            // 사용자 운동 기록 업데이트
+            const updates = {
+                workoutHistory: [...(currentUser.workoutHistory || []), workout],
+                weeklyBodyParts: currentUser.weeklyBodyParts || []
+            };
+
+            // 운동 부위 추가 (중복 제거)
+            if (!updates.weeklyBodyParts.includes(selectedBodyPart)) {
+                updates.weeklyBodyParts.push(selectedBodyPart);
+            }
+
+            updateUserInFirebase(currentUser.id, updates)
+                .then(() => {
+                    alert(`${exerciseName} 운동이 저장되었습니다!`);
+                    
+                    // 현재 사용자 정보 업데이트
+                    currentUser.workoutHistory = updates.workoutHistory;
+                    currentUser.weeklyBodyParts = updates.weeklyBodyParts;
+                    
+                    // 초기화
+                    selectedBodyPart = null;
+                    document.querySelectorAll('.body-part').forEach(bp => {
+                        bp.classList.remove('selected');
+                    });
+                    document.getElementById('strengthWorkout').style.display = 'none';
+                    
+                    // 홈으로 이동하면서 사용자 카드 새로고침
+                    showStep('step1');
+                    loadUsers();
+                })
+                .catch(error => {
+                    console.error('운동 저장 오류:', error);
+                    alert('운동 저장에 실패했습니다.');
+                });
+        }
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                uploadedImage = e.target.result;
+                const preview = document.getElementById('imagePreview');
+                preview.innerHTML = `
+                    <img src="${uploadedImage}" style="max-width: 200px; max-height: 200px; border-radius: 10px;">
+                    <p>사진이 업로드되었습니다!</p>
+                `;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function saveCardioWorkout() {
+            if (!currentUser) {
+                alert('사용자를 선택해주세요!');
+                return;
+            }
+
+            const time = document.getElementById('cardioTime').value;
+            const distance = document.getElementById('cardioDistance').value;
+            const calories = document.getElementById('cardioCalories').value;
+
+            if (!time || !distance || !calories) {
+                alert('모든 정보를 입력해주세요!');
+                return;
+            }
+
+            if (!uploadedImage) {
+                alert('운동 사진을 업로드해주세요!');
+                return;
+            }
+
+            // 유산소 운동 기록 저장
+            const workout = {
+                id: Date.now().toString(),
+                type: 'cardio',
+                date: new Date().toISOString(),
+                time: parseInt(time),
+                distance: parseFloat(distance),
+                calories: parseInt(calories),
+                image: uploadedImage
+            };
+
+            // 사용자 정보 업데이트
+            const updates = {
+                workoutHistory: [...(currentUser.workoutHistory || []), workout],
+                weeklyCalories: (currentUser.weeklyCalories || 0) + parseInt(calories)
+            };
+
+            updateUserInFirebase(currentUser.id, updates)
+                .then(() => {
+                    alert('유산소 운동이 저장되었습니다!');
+                    
+                    // 현재 사용자 정보 업데이트
+                    currentUser.workoutHistory = updates.workoutHistory;
+                    currentUser.weeklyCalories = updates.weeklyCalories;
+                    
+                    // 입력 필드 초기화
+                    document.getElementById('cardioTime').value = '';
+                    document.getElementById('cardioDistance').value = '';
+                    document.getElementById('cardioCalories').value = '';
+                    document.getElementById('imagePreview').innerHTML = '<p>📷 사진을 업로드하세요</p>';
+                    uploadedImage = null;
+                    
+                    // 홈으로 이동하면서 사용자 카드 새로고침
+                    showStep('step1');
+                    loadUsers();
+                })
+                .catch(error => {
+                    console.error('운동 저장 오류:', error);
+                    alert('운동 저장에 실패했습니다.');
+                });
+        }
+
+        function showPhotoGallery(user) {
+            currentUser = user;
+            document.getElementById('galleryUserName').textContent = `${user.name}님의 운동 여정`;
+            
+            const container = document.getElementById('photoGalleryContainer');
+            container.innerHTML = '';
+            
+            // 운동 기록을 날짜별로 그룹화
+            const workoutsByDate = groupWorkoutsByDate(user.workoutHistory || []);
+            
+            if (Object.keys(workoutsByDate).length === 0) {
+                container.innerHTML = '<div class="no-photos">아직 운동 기록이 없습니다.</div>';
+            } else {
+                // 날짜 순서대로 정렬 (최신순)
+                const sortedDates = Object.keys(workoutsByDate).sort().reverse();
+                
+                sortedDates.forEach(date => {
+                    const dateGroup = document.createElement('div');
+                    dateGroup.className = 'date-group';
+                    
+                    const workouts = workoutsByDate[date];
+                    const photosForDate = workouts.filter(w => w.image);
+                    
+                    if (photosForDate.length > 0) {
+                        dateGroup.innerHTML = `
+                            <div class="date-header">${formatDate(date)}</div>
+                            <div class="photo-grid">
+                                ${photosForDate.map(workout => `
+                                    <div class="photo-item">
+                                        <img src="${workout.image}" alt="운동 사진" onclick="showDayWorkouts('${date}')">
+                                        <button class="delete-btn" onclick="event.stopPropagation(); deleteWorkout('${workout.id}')" title="삭제">×</button>
                                     </div>
-                                    ${setDetails.length === 0 ? `
-                                        <div class="text-center py-6 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
-                                            <p class="text-sm">세트 추가 버튼을 눌러 운동 세트를 추가하세요</p>
-                                        </div>
-                                    ` : `
-                                        <div class="space-y-3 max-h-60 overflow-y-auto">
-                                            ${setDetails.map((set, index) => `
-                                                <div class="flex items-center gap-3 p-3 bg-purple-50 rounded-lg border border-purple-200">
-                                                    <span class="text-sm font-medium text-purple-800 w-12">${index + 1}세트</span>
-                                                    <div class="flex-1 grid grid-cols-2 gap-3">
-                                                        <div>
-                                                            <input type="number" value="${set.reps}" oninput="updateSetReps(${index}, this.value)"
-                                                                   placeholder="횟수" min="1" max="100" class="w-full p-2 border border-gray-300 rounded text-sm">
-                                                            <label class="text-xs text-gray-600">횟수</label>
-                                                        </div>
-                                                        <div>
-                                                            <input type="number" step="0.5" value="${set.weight}" oninput="updateSetWeight(${index}, this.value)"
-                                                                   placeholder="무게" min="0" max="500" class="w-full p-2 border border-gray-300 rounded text-sm">
-                                                            <label class="text-xs text-gray-600">무게(kg)</label>
-                                                        </div>
-                                                    </div>
-                                                    <button type="button" onclick="removeSet(${index})" class="text-red-500 hover:text-red-700 font-bold text-lg w-8 h-8">×</button>
-                                                </div>
-                                            `).join('')}
-                                        </div>
-                                    `}
-                                </div>
+                                `).join('')}
                             </div>
-                            <div class="bg-purple-50 rounded-lg p-6">
-                                <div class="text-center mb-4">
-                                    <div class="text-4xl mb-2">💪</div>
-                                    <h3 class="text-lg font-bold text-purple-800">${selectedBodyPart} 운동 기록</h3>
-                                    <p class="text-sm text-purple-600">${members.find(m => m.id === selectedMember).name}님의 기록</p>
-                                </div>
-                                ${records.length === 0 ? `
-                                    <div class="text-center text-gray-500 py-4">
-                                        <p class="text-sm">아직 ${selectedBodyPart} 운동 기록이 없습니다</p>
-                                        <p class="text-xs mt-1">첫 번째 운동을 기록해보세요!</p>
+                        `;
+                        container.appendChild(dateGroup);
+                    }
+                });
+                
+                // 사진이 있는 운동이 없는 경우
+                if (container.innerHTML === '') {
+                    container.innerHTML = '<div class="no-photos">아직 사진이 있는 운동 기록이 없습니다.</div>';
+                }
+            }
+            
+            showStep('step7');
+        }
+
+        function showDayWorkouts(dateString) {
+            const workoutsByDate = groupWorkoutsByDate(currentUser.workoutHistory || []);
+            const dayWorkouts = workoutsByDate[dateString] || [];
+            
+            if (dayWorkouts.length === 0) return;
+            
+            const detailsContainer = document.getElementById('workoutDetails');
+            let detailsHTML = `
+                <h3>${formatDate(dateString)}</h3>
+            `;
+            
+            // 유산소 운동 먼저 표시
+            const cardioWorkouts = dayWorkouts.filter(w => w.type === 'cardio');
+            cardioWorkouts.forEach(workout => {
+                if (workout.image) {
+                    detailsHTML += `
+                        <div style="text-align: center; margin-bottom: 20px;">
+                            <img src="${workout.image}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">
+                        </div>
+                    `;
+                }
+                
+                detailsHTML += `
+                    <div class="workout-detail">
+                        <h4 class="cardio-header">🏃 유산소 운동</h4>
+                        <div class="workout-detail-content">
+                            <p><strong>시간:</strong> ${workout.time}분</p>
+                            <p><strong>거리:</strong> ${workout.distance}km</p>
+                            <p><strong>칼로리:</strong> ${workout.calories}kcal</p>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            // 근력 운동을 부위별로 그룹화
+            const strengthWorkouts = dayWorkouts.filter(w => w.type === 'strength');
+            const workoutsByBodyPart = {};
+            
+            strengthWorkouts.forEach(workout => {
+                if (!workoutsByBodyPart[workout.bodyPart]) {
+                    workoutsByBodyPart[workout.bodyPart] = [];
+                }
+                workoutsByBodyPart[workout.bodyPart].push(workout);
+            });
+            
+            // 부위별로 근력 운동 표시
+            Object.keys(workoutsByBodyPart).forEach(bodyPart => {
+                const workouts = workoutsByBodyPart[bodyPart];
+                
+                detailsHTML += `
+                    <div class="workout-detail">
+                        <h4>🏋️ 근력 운동 - ${bodyPart}</h4>
+                        <div class="workout-detail-content">
+                `;
+                
+                workouts.forEach(workout => {
+                    detailsHTML += `
+                        <div style="margin-bottom: 15px; padding: 10px; background: white; border-radius: 8px;">
+                            <p><strong>운동:</strong> ${workout.exercise}</p>
+                            <div style="margin-top: 8px;">
+                                ${workout.sets.map(set => `
+                                    <div class="set-detail">
+                                        ${set.setNumber}세트: ${set.weight}kg × ${set.reps}회
                                     </div>
-                                ` : `
-                                    <div class="space-y-3 max-h-64 overflow-y-auto">
-                                        <h4 class="text-sm font-medium text-gray-700 mb-2">🏆 최고 기록들</h4>
-                                        ${records.map(record => `
-                                            <div class="bg-white rounded-lg p-3 border border-purple-200">
-                                                <div class="flex justify-between items-start">
-                                                    <div class="flex-1">
-                                                        <h5 class="font-medium text-gray-800 text-sm">${record.exerciseName}</h5>
-                                                        <div class="flex items-center gap-2 mt-1">
-                                                            <span class="text-lg font-bold text-purple-600">${record.maxWeight}kg</span>
-                                                            <span class="text-sm text-gray-600">${record.repsAtMaxWeight}회</span>
-                                                        </div>
-                                                    </div>
-                                                    <div class="text-right">
-                                                        <div class="text-xs text-gray-500">${record.totalSessions}회 실행</div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        `).join('')}
-                                    </div>
-                                `}
-                                ${setDetails.length > 0 ? `
-                                    <div class="mt-4 p-3 bg-white rounded-lg border-2 border-purple-300">
-                                        <p class="text-sm font-medium text-purple-800 mb-2">📝 현재 입력 중</p>
-                                        <div class="text-xs text-gray-600 space-y-1">
-                                            ${setDetails.map((set, index) => `
-                                                <div class="flex justify-between">
-                                                    <span>${index + 1}세트</span>
-                                                    <span>${set.reps || '?'}회 × ${set.weight || '?'}kg</span>
-                                                </div>
-                                            `).join('')}
-                                        </div>
-                                    </div>
-                                ` : ''}
+                                `).join('')}
                             </div>
                         </div>
-                        <div class="flex gap-3 mt-6">
-                            <button onclick="addWorkoutRoutine()" ${loading ? 'disabled' : ''} class="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white px-6 py-3 rounded-lg font-semibold flex-1">
-                                ${loading ? '⏳ 저장 중...' : '💪 루틴 저장'}
-                            </button>
-                            <button onclick="toggleAddRoutineForm()" class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold">취소</button>
+                    `;
+                });
+                
+                detailsHTML += `
+                        </div>
+                    </div>
+                `;
+            });
+            
+            detailsContainer.innerHTML = detailsHTML;
+            document.getElementById('workoutModal').style.display = 'block';
+        }
+
+        function groupWorkoutsByDate(workoutHistory) {
+            const grouped = {};
+            workoutHistory.forEach(workout => {
+                const date = new Date(workout.date).toDateString();
+                if (!grouped[date]) {
+                    grouped[date] = [];
+                }
+                grouped[date].push(workout);
+            });
+            return grouped;
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const year = date.getFullYear();
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+            const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+            const weekday = weekdays[date.getDay()];
+            
+            return `${year}.${month.toString().padStart(2, '0')}.${day.toString().padStart(2, '0')} (${weekday})`;
+        }
+
+        function showWorkoutDetail(workoutId) {
+            const workout = currentUser.workoutHistory.find(w => w.id === workoutId);
+            if (!workout) return;
+            
+            const detailsContainer = document.getElementById('workoutDetails');
+            let detailsHTML = `
+                <h3>${formatDate(new Date(workout.date).toDateString())}</h3>
+            `;
+            
+            if (workout.image) {
+                detailsHTML += `
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <img src="${workout.image}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">
+                    </div>
+                `;
+            }
+            
+            if (workout.type === 'cardio') {
+                detailsHTML += `
+                    <div class="workout-detail">
+                        <h4>🏃 유산소 운동</h4>
+                        <div class="workout-detail-content">
+                            <p><strong>시간:</strong> ${workout.time}분</p>
+                            <p><strong>거리:</strong> ${workout.distance}km</p>
+                            <p><strong>칼로리:</strong> ${workout.calories}kcal</p>
+                        </div>
+                    </div>
+                `;
+            } else if (workout.type === 'strength') {
+                detailsHTML += `
+                    <div class="workout-detail">
+                        <h4>🏋️ 근력 운동 - ${workout.bodyPart}</h4>
+                        <div class="workout-detail-content">
+                            <p><strong>운동:</strong> ${workout.exercise}</p>
+                            <div style="margin-top: 10px;">
+                                ${workout.sets.map(set => `
+                                    <div class="set-detail">
+                                        ${set.setNumber}세트: ${set.weight}kg × ${set.reps}회
+                                    </div>
+                                `).join('')}
+                            </div>
                         </div>
                     </div>
                 `;
             }
-
-            return formHTML;
+            
+            detailsContainer.innerHTML = detailsHTML;
+            document.getElementById('workoutModal').style.display = 'block';
         }
 
-        function renderRecordsSection() {
-            const failedMembers = members.filter(member => getLastWeeklyCount(member.id) < 4);
+        function closeWorkoutModal() {
+            document.getElementById('workoutModal').style.display = 'none';
+        }
+
+        function showWorkoutReport() {
+            document.getElementById('reportUserName').textContent = `${currentUser.name}님의 운동 리포트`;
+            
+            // 기본적으로 주간 리포트 표시
+            switchReportTab('weekly');
+            
+            showStep('step8');
+        }
+
+        function switchReportTab(tabType) {
+            // 탭 활성화 상태 변경
+            document.querySelectorAll('.report-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            const reportContainer = document.getElementById('reportContainer');
+            reportContainer.innerHTML = '<div style="text-align: center; padding: 20px;">리포트를 생성하는 중...</div>';
+            
+            let report = '';
+            
+            switch(tabType) {
+                case 'weekly':
+                    report = generateWeeklyReport(currentUser);
+                    break;
+                case 'monthly':
+                    report = generateMonthlyReport(currentUser);
+                    break;
+                case 'cumulative':
+                    report = generateCumulativeReport(currentUser);
+                    break;
+            }
+            
+            reportContainer.innerHTML = report;
+        }
+
+        function generateWeeklyReport(user) {
+            const lastWeek = getLastWeekRange();
+            const workoutHistory = user.workoutHistory || [];
+            
+            // 지난주 운동 필터링
+            const lastWeekWorkouts = workoutHistory.filter(workout => {
+                const workoutDate = new Date(workout.date);
+                return workoutDate >= lastWeek.start && workoutDate <= lastWeek.end;
+            });
+            
+            let reportHTML = `
+                <div class="report-content">
+                    <h3>📊 ${formatDateRange(lastWeek.start, lastWeek.end)} 주간 리포트</h3>
+            `;
+            
+            // 1. 지난주 근력 운동 횟수
+            reportHTML += generateStrengthReport(lastWeekWorkouts);
+            
+            // 2. 무게 증가 운동
+            reportHTML += generateWeightProgressReport(user, lastWeekWorkouts);
+            
+            // 3. 유산소 거리 기록
+            reportHTML += generateCardioReport(user, lastWeekWorkouts);
+            
+            reportHTML += '</div>';
+            
+            return reportHTML;
+        }
+
+        function getLastWeekRange() {
+            const today = new Date();
+            const currentDay = today.getDay(); // 0 = 일요일, 1 = 월요일
+            
+            // 지난주 월요일 00:00:00
+            const lastWeekStart = new Date(today);
+            lastWeekStart.setDate(today.getDate() - currentDay - 6);
+            lastWeekStart.setHours(0, 0, 0, 0);
+            
+            // 지난주 일요일 23:59:59
+            const lastWeekEnd = new Date(lastWeekStart);
+            lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+            lastWeekEnd.setHours(23, 59, 59, 999);
+            
+            return { start: lastWeekStart, end: lastWeekEnd };
+        }
+
+        function formatDateRange(start, end) {
+            const startStr = `${start.getMonth() + 1}.${start.getDate()}`;
+            const endStr = `${end.getMonth() + 1}.${end.getDate()}`;
+            return `${startStr} - ${endStr}`;
+        }
+
+        function generateStrengthReport(lastWeekWorkouts) {
+            const bodyParts = ['가슴', '등', '어깨', '이두', '삼두', '복부', '하체'];
+            const bodyPartCounts = {};
+            
+            // 각 부위별 운동 횟수 계산
+            bodyParts.forEach(part => bodyPartCounts[part] = 0);
+            
+            lastWeekWorkouts.forEach(workout => {
+                if (workout.type === 'strength' && bodyPartCounts.hasOwnProperty(workout.bodyPart)) {
+                    bodyPartCounts[workout.bodyPart]++;
+                }
+            });
+            
+            let html = `
+                <div class="report-section">
+                    <h4>💪 지난주 근력 운동</h4>
+                    <div style="margin-top: 15px;">
+            `;
+            
+            bodyParts.forEach(part => {
+                const count = bodyPartCounts[part];
+                let colorClass = '';
+                
+                if (count >= 2) {
+                    colorClass = 'gold';
+                } else if (count === 0) {
+                    colorClass = 'red';
+                }
+                
+                html += `<span class="body-part-count ${colorClass}">${part} ${count}</span>`;
+            });
+            
+            html += `
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+
+        function generateMonthlyReport(user) {
+            const lastMonth = getLastMonthRange();
+            const workoutHistory = user.workoutHistory || [];
+            
+            // 지난달 운동 필터링
+            const lastMonthWorkouts = workoutHistory.filter(workout => {
+                const workoutDate = new Date(workout.date);
+                return workoutDate >= lastMonth.start && workoutDate <= lastMonth.end;
+            });
+            
+            let reportHTML = `
+                <div class="report-content">
+                    <h3>📊 ${formatMonthRange(lastMonth.start, lastMonth.end)} 월간 리포트</h3>
+            `;
+            
+            // 월간 요약 통계
+            reportHTML += generateMonthlySummary(lastMonthWorkouts);
+            
+            // 월간 근력 운동 상세
+            reportHTML += generateMonthlyStrengthReport(lastMonthWorkouts);
+            
+            // 월간 유산소 운동 상세
+            reportHTML += generateMonthlyCardioReport(lastMonthWorkouts);
+            
+            reportHTML += '</div>';
+            
+            return reportHTML;
+        }
+
+        function generateCumulativeReport(user) {
+            const workoutHistory = user.workoutHistory || [];
+            
+            let reportHTML = `
+                <div class="report-content">
+                    <h3>📈 누적 운동 리포트</h3>
+            `;
+            
+            // 전체 통계
+            reportHTML += generateCumulativeStats(workoutHistory);
+            
+            // 운동 기록 분석
+            reportHTML += generateWorkoutAnalysis(workoutHistory);
+            
+            reportHTML += '</div>';
+            
+            return reportHTML;
+        }
+
+        function getLastMonthRange() {
+            const today = new Date();
+            const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+            lastMonthEnd.setHours(23, 59, 59, 999);
+            
+            return { start: lastMonth, end: lastMonthEnd };
+        }
+
+        function formatMonthRange(start, end) {
+            const year = start.getFullYear();
+            const month = start.getMonth() + 1;
+            return `${year}.${month.toString().padStart(2, '0')}`;
+        }
+
+        function generateMonthlySummary(lastMonthWorkouts) {
+            const strengthWorkouts = lastMonthWorkouts.filter(w => w.type === 'strength');
+            const cardioWorkouts = lastMonthWorkouts.filter(w => w.type === 'cardio');
+            
+            const totalWorkoutDays = new Set(lastMonthWorkouts.map(w => new Date(w.date).toDateString())).size;
+            const totalCalories = cardioWorkouts.reduce((sum, w) => sum + (w.calories || 0), 0);
+            const totalDistance = cardioWorkouts.reduce((sum, w) => sum + (w.distance || 0), 0);
+            
+            // 부위별 운동 횟수 계산
+            const bodyPartCounts = {};
+            strengthWorkouts.forEach(workout => {
+                bodyPartCounts[workout.bodyPart] = (bodyPartCounts[workout.bodyPart] || 0) + 1;
+            });
+            
+            // 가장 많이/적게 한 부위 찾기
+            const bodyPartEntries = Object.entries(bodyPartCounts).filter(([, count]) => count > 0);
+            const mostWorkedPart = bodyPartEntries.length > 0 
+                ? bodyPartEntries.reduce((max, current) => current[1] > max[1] ? current : max)
+                : ['없음', 0];
+            const leastWorkedPart = bodyPartEntries.length > 0 
+                ? bodyPartEntries.reduce((min, current) => current[1] < min[1] ? current : min)
+                : ['없음', 0];
             
             return `
-                <div class="bg-white rounded-xl shadow-lg p-6">
-                    <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        ❌ 저번 주 할당량 미달성자
-                    </h2>
-                    ${failedMembers.length === 0 ? `
-                        <div class="text-center py-8 text-green-600">
-                            <div class="text-6xl mb-3">✅</div>
-                            <p class="font-semibold">모든 멤버가 저번 주 목표를 달성했습니다! 🎉</p>
-                            <p class="text-sm text-gray-600 mt-1">
-                                ${lastWeekDates[0].toLocaleDateString()} ~ ${lastWeekDates[6].toLocaleDateString()}
-                            </p>
-                        </div>
-                    ` : `
-                        <div class="space-y-3">
-                            <div class="text-sm text-gray-600 mb-4">
-                                기간: ${lastWeekDates[0].toLocaleDateString()} ~ ${lastWeekDates[6].toLocaleDateString()}
-                            </div>
-                            ${failedMembers.map(member => {
-                                const lastWeekCount = getLastWeeklyCount(member.id);
-                                return `
-                                    <div class="flex items-center gap-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                                        <div class="w-4 h-4 rounded-full ${member.color}"></div>
-                                        <div class="flex-1">
-                                            <div class="font-semibold text-gray-800">${member.name}</div>
-                                            <div class="text-sm text-red-600">
-                                                ${lastWeekCount}/4회 완료 • ${4 - lastWeekCount}회 미달성
-                                            </div>
-                                        </div>
-                                        <span class="text-red-500 text-xl">❌</span>
-                                    </div>
-                                `;
-                            }).join('')}
-                        </div>
-                    `}
+                <div class="monthly-summary">
+                    <div class="summary-card">
+                        <div class="summary-value">${totalWorkoutDays}</div>
+                        <div class="summary-label">운동한 날</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-value">${totalDistance.toFixed(1)}</div>
+                        <div class="summary-label">달린 거리 (km)</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-value">${totalCalories}</div>
+                        <div class="summary-label">소모 칼로리</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-value">${mostWorkedPart[0]}</div>
+                        <div class="summary-label">가장 많이 한 부위 (${mostWorkedPart[1]}회)</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-value">${leastWorkedPart[0]}</div>
+                        <div class="summary-label">가장 적게 한 부위 (${leastWorkedPart[1]}회)</div>
+                    </div>
                 </div>
             `;
         }
 
-        function renderModals() {
-            let modalsHTML = '';
-
-            // 전체 운동 기록 모달
-            if (showAllRecords) {
-                const allRecords = getAllRecordsForMember(selectedRecordForMember);
-                const memberName = members.find(m => m.id === selectedRecordForMember).name;
+        function generateMonthlyStrengthReport(lastMonthWorkouts) {
+            const bodyParts = ['가슴', '등', '어깨', '이두', '삼두', '복부', '하체'];
+            const bodyPartCounts = {};
+            
+            bodyParts.forEach(part => bodyPartCounts[part] = 0);
+            
+            lastMonthWorkouts.forEach(workout => {
+                if (workout.type === 'strength' && bodyPartCounts.hasOwnProperty(workout.bodyPart)) {
+                    bodyPartCounts[workout.bodyPart]++;
+                }
+            });
+            
+            let html = `
+                <div class="report-section">
+                    <h4>💪 지난달 근력 운동</h4>
+                    <div style="margin-top: 15px;">
+            `;
+            
+            bodyParts.forEach(part => {
+                const count = bodyPartCounts[part];
+                let colorClass = '';
                 
-                modalsHTML += `
-                    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onclick="closeAllRecords(event)">
-                        <div class="bg-white rounded-xl w-full max-w-5xl max-h-screen overflow-hidden flex flex-col" onclick="event.stopPropagation()">
-                            <div class="p-6 border-b border-gray-200">
-                                <div class="flex items-center justify-between">
-                                    <h2 class="text-2xl font-bold text-gray-800">📊 전체 운동 기록</h2>
-                                    <button onclick="closeAllRecords()" class="text-gray-500 hover:text-gray-700 text-2xl font-bold">×</button>
-                                </div>
-                                <div class="mt-4">
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">멤버 선택</label>
-                                    <select onchange="handleRecordMemberChange(this.value)" class="p-2 border border-gray-300 rounded-lg">
-                                        ${members.map(member => 
-                                            `<option value="${member.id}" ${member.id === selectedRecordForMember ? 'selected' : ''}>${member.name}</option>`
-                                        ).join('')}
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="flex-1 overflow-y-auto p-6">
-                                ${allRecords.length === 0 ? `
-                                    <div class="text-center py-12 text-gray-500">
-                                        <div class="text-6xl mb-4">📝</div>
-                                        <p class="text-lg font-medium">${memberName}님의 운동 기록이 없습니다</p>
-                                        <p class="text-sm">첫 번째 운동을 시작해보세요!</p>
-                                    </div>
-                                ` : `
-                                    <div class="space-y-4">
-                                        <h3 class="text-lg font-semibold text-gray-800 mb-4">
-                                            ${memberName}님의 운동 기록 (총 ${allRecords.length}개)
-                                        </h3>
-                                        ${Object.entries(groupRecordsByDate(allRecords)).map(([date, dayRecords]) => `
-                                            <div class="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
-                                                <div class="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                                                    <h4 class="font-semibold text-gray-800">📅 ${date}</h4>
-                                                </div>
-                                                <div class="p-4">
-                                                    <div class="grid gap-3">
-                                                        ${dayRecords.cardio.length > 0 ? `
-                                                            <div>
-                                                                <h5 class="text-sm font-medium text-indigo-600 mb-2">🏃 유산소 운동</h5>
-                                                                <div class="space-y-2">
-                                                                    ${dayRecords.cardio.map((record, index) => {
-                                                                        const recordIndex = allRecords.findIndex(r => r.timestamp === record.timestamp);
-                                                                        return `
-                                                                            <div class="bg-indigo-50 p-3 rounded-lg cursor-pointer hover:bg-indigo-100 transition-colors"
-                                                                                 onclick="showDetailRecord(${recordIndex})">
-                                                                                <div class="flex justify-between items-center">
-                                                                                    <div class="flex gap-4 text-sm">
-                                                                                        <span>⏱️ ${record.duration}분</span>
-                                                                                        <span>🏃 ${record.distance}km</span>
-                                                                                        <span>🔥 ${record.calories}kcal</span>
-                                                                                    </div>
-                                                                                    <span class="text-xs text-gray-500">클릭하여 상세보기</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        `;
-                                                                    }).join('')}
-                                                                </div>
-                                                            </div>
-                                                        ` : ''}
-                                                        ${dayRecords.strength.length > 0 ? `
-                                                            <div>
-                                                                <h5 class="text-sm font-medium text-purple-600 mb-2">💪 근력 운동</h5>
-                                                                <div class="space-y-2">
-                                                                    ${dayRecords.strength.map((record, index) => {
-                                                                        const recordIndex = allRecords.findIndex(r => r.timestamp === record.timestamp);
-                                                                        return `
-                                                                            <div class="bg-purple-50 p-3 rounded-lg cursor-pointer hover:bg-purple-100 transition-colors"
-                                                                                 onclick="showDetailRecord(${recordIndex})">
-                                                                                <div class="flex justify-between items-center">
-                                                                                    <div class="flex gap-4 text-sm">
-                                                                                        <span class="font-medium">${record.bodyPart}</span>
-                                                                                        <span>${record.exerciseName}</span>
-                                                                                        <span>${record.setDetails ? record.setDetails.length : record.sets || 0}세트</span>
-                                                                                    </div>
-                                                                                    <span class="text-xs text-gray-500">클릭하여 상세보기</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        `;
-                                                                    }).join('')}
-                                                                </div>
-                                                            </div>
-                                                        ` : ''}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        `).join('')}
-                                    </div>
-                                `}
-                            </div>
-                            <div class="p-4 border-t border-gray-200 bg-gray-50">
-                                <button onclick="closeAllRecords()" class="w-full bg-gray-600 hover:bg-gray-700 text-white py-3 px-4 rounded-lg font-semibold">닫기</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-
-            // 상세 기록 팝업
-            if (showDetailPopup && selectedDetailRecord) {
-                modalsHTML += `
-                    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onclick="closeDetailPopup(event)">
-                        <div class="bg-white rounded-xl w-full max-w-2xl max-h-screen overflow-hidden flex flex-col" onclick="event.stopPropagation()">
-                            <div class="p-6 border-b border-gray-200">
-                                <div class="flex items-center justify-between">
-                                    <h2 class="text-xl font-bold text-gray-800">
-                                        ${selectedDetailRecord.type === 'cardio' ? '🏃 유산소 운동 상세' : '💪 근력 운동 상세'}
-                                    </h2>
-                                    <button onclick="closeDetailPopup()" class="text-gray-500 hover:text-gray-700 text-xl font-bold">×</button>
-                                </div>
-                                <p class="text-gray-600 mt-1">${new Date(selectedDetailRecord.date).toLocaleString()}</p>
-                            </div>
-                            <div class="flex-1 overflow-y-auto p-6">
-                                ${selectedDetailRecord.type === 'cardio' ? `
-                                    <div class="space-y-4">
-                                        <div class="bg-indigo-50 p-4 rounded-lg">
-                                            <h3 class="font-semibold text-indigo-800 mb-3">운동 정보</h3>
-                                            <div class="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <label class="text-sm text-gray-600">운동 시간</label>
-                                                    <p class="font-medium">⏱️ ${selectedDetailRecord.duration}분</p>
-                                                </div>
-                                                <div>
-                                                    <label class="text-sm text-gray-600">거리</label>
-                                                    <p class="font-medium">🏃 ${selectedDetailRecord.distance}km</p>
-                                                </div>
-                                                <div>
-                                                    <label class="text-sm text-gray-600">소모 칼로리</label>
-                                                    <p class="font-medium">🔥 ${selectedDetailRecord.calories}kcal</p>
-                                                </div>
-                                                <div>
-                                                    <label class="text-sm text-gray-600">평균 속도</label>
-                                                    <p class="font-medium">⚡ ${(selectedDetailRecord.distance / (selectedDetailRecord.duration / 60)).toFixed(1)}km/h</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        ${selectedDetailRecord.photoBase64 ? `
-                                            <div>
-                                                <h3 class="font-semibold text-gray-800 mb-3">인증 사진</h3>
-                                                <img src="${selectedDetailRecord.photoBase64}" alt="운동 인증 사진" class="w-full max-w-md mx-auto rounded-lg border border-gray-300">
-                                            </div>
-                                        ` : ''}
-                                    </div>
-                                ` : `
-                                    <div class="space-y-4">
-                                        <div class="bg-purple-50 p-4 rounded-lg">
-                                            <h3 class="font-semibold text-purple-800 mb-3">운동 정보</h3>
-                                            <div class="grid grid-cols-2 gap-4 mb-4">
-                                                <div>
-                                                    <label class="text-sm text-gray-600">운동 부위</label>
-                                                    <p class="font-medium">💪 ${selectedDetailRecord.bodyPart}</p>
-                                                </div>
-                                                <div>
-                                                    <label class="text-sm text-gray-600">운동 이름</label>
-                                                    <p class="font-medium">${selectedDetailRecord.exerciseName}</p>
-                                                </div>
-                                            </div>
-                                            <h4 class="font-medium text-gray-800 mb-2">세트별 상세</h4>
-                                            <div class="space-y-2">
-                                                ${selectedDetailRecord.setDetails ? selectedDetailRecord.setDetails.map((set, index) => `
-                                                    <div class="flex justify-between items-center p-2 bg-white rounded border">
-                                                        <span class="font-medium text-purple-600">${index + 1}세트</span>
-                                                        <div class="flex gap-4 text-sm">
-                                                            <span>🔁 ${set.reps}회</span>
-                                                            <span>⚖️ ${set.weight}kg</span>
-                                                        </div>
-                                                    </div>
-                                                `).join('') : `
-                                                    <div class="flex justify-between items-center p-2 bg-white rounded border">
-                                                        <span class="font-medium text-purple-600">전체</span>
-                                                        <div class="flex gap-4 text-sm">
-                                                            <span>🔢 ${selectedDetailRecord.sets}세트</span>
-                                                            <span>🔁 ${selectedDetailRecord.reps}회</span>
-                                                            <span>⚖️ ${selectedDetailRecord.weight}kg</span>
-                                                        </div>
-                                                    </div>
-                                                `}
-                                            </div>
-                                        </div>
-                                    </div>
-                                `}
-                            </div>
-                            <div class="p-4 border-t border-gray-200 bg-gray-50">
-                                <button onclick="closeDetailPopup()" class="w-full bg-gray-600 hover:bg-gray-700 text-white py-3 px-4 rounded-lg font-semibold">닫기</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-
-            // 사진 모달
-            if (showPhotos && selectedMemberPhotos) {
-                modalsHTML += `
-                    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onclick="closePhotos(event)">
-                        <div class="bg-white rounded-xl w-full max-w-4xl max-h-screen overflow-hidden flex flex-col" onclick="event.stopPropagation()">
-                            <div class="p-6 border-b border-gray-200">
-                                <div class="flex items-center justify-between">
-                                    <h2 class="text-2xl font-bold text-gray-800">📷 ${selectedMemberPhotos.memberName}의 운동 기록</h2>
-                                    <div class="flex items-center gap-3">
-                                        ${!showDeleteMode ? `
-                                            <button onclick="toggleDeleteMode()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium text-sm">
-                                                삭제
-                                            </button>
-                                        ` : `
-                                            <div class="flex items-center gap-2">
-                                                <span class="text-sm text-gray-600">${selectedRecordsToDelete.size}개 선택됨</span>
-                                                <button onclick="deleteSelectedRecords()" ${loading || selectedRecordsToDelete.size === 0 ? 'disabled' : ''} 
-                                                        class="bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white px-3 py-2 rounded-lg font-medium text-sm">
-                                                    ${loading ? '⏳ 삭제 중...' : '삭제'}
-                                                </button>
-                                                <button onclick="toggleDeleteMode()" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-lg font-medium text-sm">
-                                                    취소
-                                                </button>
-                                            </div>
-                                        `}
-                                        <button onclick="closePhotos()" class="text-gray-500 hover:text-gray-700 text-2xl font-bold">×</button>
-                                    </div>
-                                </div>
-                                <p class="text-gray-600 mt-1">총 ${selectedMemberPhotos.exercises.length + selectedMemberPhotos.routines.length}개의 운동 기록 📊</p>
-                                ${showDeleteMode ? `
-                                    <div class="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                                        <p class="text-sm text-red-700">
-                                            ⚠️ 삭제할 운동 기록을 클릭하여 선택하세요. 
-                                            삭제된 기록은 복구할 수 없습니다.
-                                        </p>
-                                    </div>
-                                ` : ''}
-                            </div>
-                            <div class="flex-1 overflow-y-auto p-6">
-                                ${selectedMemberPhotos.exercises.length === 0 && selectedMemberPhotos.routines.length === 0 ? `
-                                    <div class="text-center py-12 text-gray-500">
-                                        <div class="text-6xl mb-4">💪</div>
-                                        <p class="text-lg font-medium">아직 운동 기록이 없습니다</p>
-                                        <p class="text-sm">첫 번째 운동을 시작해보세요! 🏃‍♂️</p>
-                                    </div>
-                                ` : `
-                                    <div class="space-y-6">
-                                        ${Object.entries(groupAllWorkoutsByDate(selectedMemberPhotos.exercises, selectedMemberPhotos.routines)).map(([date, workouts]) => `
-                                            <div class="border border-gray-200 rounded-lg overflow-hidden">
-                                                <div class="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                                                    <h3 class="font-semibold text-gray-800">📅 ${date} (${workouts.cardio.length + workouts.strength.length}개 운동)</h3>
-                                                </div>
-                                                <div class="p-4 space-y-6">
-                                                    ${workouts.cardio.length > 0 ? `
-                                                        <div>
-                                                            <h4 class="text-lg font-semibold text-indigo-600 mb-3">🏃 유산소 운동</h4>
-                                                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                                ${workouts.cardio.map(exercise => {
-                                                                    const isSelected = selectedRecordsToDelete.has(`cardio-${exercise.firebaseId}`);
-                                                                    return `
-                                                                        <div class="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm relative ${showDeleteMode ? 'cursor-pointer hover:bg-gray-50' : ''} ${isSelected ? 'ring-2 ring-red-500 bg-red-50' : ''}"
-                                                                             ${showDeleteMode ? `onclick="toggleRecordSelection('${exercise.firebaseId}', 'cardio')"` : ''}>
-                                                                            ${showDeleteMode && isSelected ? `
-                                                                                <div class="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold z-10">
-                                                                                    ✓
-                                                                                </div>
-                                                                            ` : ''}
-                                                                            ${showDeleteMode ? `
-                                                                                <div class="absolute inset-0 bg-black bg-opacity-10 flex items-center justify-center z-5">
-                                                                                    <div class="bg-white rounded-full p-2 shadow-lg">
-                                                                                        <span class="text-red-500 font-bold text-sm">클릭하여 ${isSelected ? '선택 해제' : '선택'}</span>
-                                                                                    </div>
-                                                                                </div>
-                                                                            ` : ''}
-                                                                            <img src="${exercise.photoBase64}" alt="${exercise.memberName} 운동 인증" class="w-full h-32 object-cover">
-                                                                            <div class="p-3">
-                                                                                <div class="space-y-1">
-                                                                                    <div class="flex justify-between items-center">
-                                                                                        <span class="text-sm font-medium text-gray-800">💪 ${exercise.duration}분</span>
-                                                                                        <span class="text-xs text-gray-500">${new Date(exercise.date).toLocaleTimeString()}</span>
-                                                                                    </div>
-                                                                                    <div class="flex justify-between items-center">
-                                                                                        <span class="text-sm text-gray-600">🏃 ${exercise.distance || 0}km</span>
-                                                                                        <span class="text-sm text-gray-600">🔥 ${exercise.calories || 0}kcal</span>
-                                                                                    </div>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    `;
-                                                                }).join('')}
-                                                            </div>
-                                                        </div>
-                                                    ` : ''}
-                                                    ${workouts.strength.length > 0 ? `
-                                                        <div>
-                                                            <h4 class="text-lg font-semibold text-purple-600 mb-3">💪 근력 운동</h4>
-                                                            <div class="space-y-3">
-                                                                ${workouts.strength.map(routine => {
-                                                                    const isSelected = selectedRecordsToDelete.has(`strength-${routine.firebaseId}`);
-                                                                    return `
-                                                                        <div class="bg-purple-50 border border-purple-200 rounded-lg p-4 relative ${showDeleteMode ? 'cursor-pointer hover:bg-purple-100' : ''} ${isSelected ? 'ring-2 ring-red-500 bg-red-50' : ''}"
-                                                                             ${showDeleteMode ? `onclick="toggleRecordSelection('${routine.firebaseId}', 'strength')"` : ''}>
-                                                                            ${showDeleteMode && isSelected ? `
-                                                                                <div class="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold z-10">
-                                                                                    ✓
-                                                                                </div>
-                                                                            ` : ''}
-                                                                            ${showDeleteMode ? `
-                                                                                <div class="absolute inset-0 bg-black bg-opacity-10 flex items-center justify-center z-5 rounded-lg">
-                                                                                    <div class="bg-white rounded-full px-3 py-1 shadow-lg">
-                                                                                        <span class="text-red-500 font-bold text-sm">클릭하여 ${isSelected ? '선택 해제' : '선택'}</span>
-                                                                                    </div>
-                                                                                </div>
-                                                                            ` : ''}
-                                                                            <div class="flex items-center justify-between mb-2">
-                                                                                <h5 class="text-xl font-bold text-purple-800">${routine.bodyPart}</h5>
-                                                                                <span class="text-xs text-gray-500">${new Date(routine.date).toLocaleTimeString()}</span>
-                                                                            </div>
-                                                                            <div class="space-y-1">
-                                                                                <p class="text-lg text-gray-800 font-medium">${routine.exerciseName}</p>
-                                                                                <div class="space-y-1">
-                                                                                    ${routine.setDetails ? routine.setDetails.map((set, index) => `
-                                                                                        <div class="text-sm text-gray-600 flex items-center gap-2">
-                                                                                            <span class="w-12 text-purple-600 font-medium">${index + 1}세트</span>
-                                                                                            <span>🔁 ${set.reps}회</span>
-                                                                                            <span>⚖️ ${set.weight}kg</span>
-                                                                                        </div>
-                                                                                    `).join('') : `
-                                                                                        <div class="flex gap-4 text-sm text-gray-600">
-                                                                                            <span>🔢 ${routine.sets || 0}세트</span>
-                                                                                            <span>🔁 ${routine.reps || 0}회</span>
-                                                                                            <span>⚖️ ${routine.weight || 0}kg</span>
-                                                                                        </div>
-                                                                                    `}
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    `;
-                                                                }).join('')}
-                                                            </div>
-                                                        </div>
-                                                    ` : ''}
-                                                </div>
-                                            </div>
-                                        `).join('')}
-                                    </div>
-                                `}
-                            </div>
-                            <div class="p-4 border-t border-gray-200 bg-gray-50">
-                                <button onclick="closePhotos()" class="w-full bg-gray-600 hover:bg-gray-700 text-white py-3 px-4 rounded-lg font-semibold">닫기</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-
-            return modalsHTML;
+                if (count >= 8) {
+                    colorClass = 'gold';
+                } else if (count === 0) {
+                    colorClass = 'red';
+                }
+                
+                html += `<span class="body-part-count ${colorClass}">${part} ${count}</span>`;
+            });
+            
+            html += `</div></div>`;
+            
+            return html;
         }
 
-        // 전역 함수들
-        window.toggleAddForm = () => {
-            showAddForm = !showAddForm;
-            showAddRoutineForm = false;
-            if (showAddForm) {
-                selectedMember = 1;
-                duration = '';
-                distance = '';
-                calories = '';
-                photo = null;
-            }
-            render();
-        };
+        function generateMonthlyCardioReport(lastMonthWorkouts) {
+            const cardioWorkouts = lastMonthWorkouts.filter(w => w.type === 'cardio');
+            const totalDistance = cardioWorkouts.reduce((sum, w) => sum + (w.distance || 0), 0);
+            const avgDistance = cardioWorkouts.length > 0 ? totalDistance / cardioWorkouts.length : 0;
+            
+            return `
+                <div class="report-section">
+                    <h4>🏃 지난달 유산소 운동</h4>
+                    <div class="cardio-record normal-record">
+                        총 ${cardioWorkouts.length}회 러닝으로 ${totalDistance.toFixed(1)}km를 달렸습니다!<br>
+                        평균 거리: ${avgDistance.toFixed(1)}km
+                    </div>
+                </div>
+            `;
+        }
 
-        window.toggleAddRoutineForm = () => {
-            showAddRoutineForm = !showAddRoutineForm;
-            showAddForm = false;
-            if (showAddRoutineForm) {
-                selectedMember = 1;
-                selectedBodyPart = '가슴';
-                exerciseName = '';
-                setDetails = [];
-            }
-            render();
-        };
+        function generateCumulativeStats(workoutHistory) {
+            const strengthWorkouts = workoutHistory.filter(w => w.type === 'strength');
+            const cardioWorkouts = workoutHistory.filter(w => w.type === 'cardio');
+            
+            const totalWorkoutDays = new Set(workoutHistory.map(w => new Date(w.date).toDateString())).size;
+            const totalDistance = cardioWorkouts.reduce((sum, w) => sum + (w.distance || 0), 0);
+            const totalCalories = cardioWorkouts.reduce((sum, w) => sum + (w.calories || 0), 0);
+            
+            const firstWorkout = workoutHistory.length > 0 ? new Date(workoutHistory[0].date) : null;
+            const daysSinceStart = firstWorkout ? Math.ceil((new Date() - firstWorkout) / (1000 * 60 * 60 * 24)) : 0;
+            
+            return `
+                <div class="cumulative-stats">
+                    <div class="stat-card">
+                        <h5>📊 전체 통계</h5>
+                        <p><strong>운동 시작:</strong> ${firstWorkout ? firstWorkout.toLocaleDateString('ko-KR') : 'N/A'}</p>
+                        <p><strong>총 운동 일수:</strong> ${totalWorkoutDays}일 (${daysSinceStart}일 중)</p>
+                        <p><strong>운동 빈도:</strong> ${daysSinceStart > 0 ? ((totalWorkoutDays / daysSinceStart) * 100).toFixed(1) : 0}%</p>
+                    </div>
+                    <div class="stat-card">
+                        <h5>🏃 유산소 운동</h5>
+                        <p><strong>총 유산소 운동:</strong> ${cardioWorkouts.length}회</p>
+                        <p><strong>총 거리:</strong> ${totalDistance.toFixed(1)}km</p>
+                        <p><strong>총 칼로리:</strong> ${totalCalories}kcal</p>
+                        <p><strong>평균 거리:</strong> ${cardioWorkouts.length > 0 ? (totalDistance / cardioWorkouts.length).toFixed(1) : 0}km</p>
+                    </div>
+                </div>
+            `;
+        }
 
-        window.addExercise = addExercise;
-        window.addWorkoutRoutine = addWorkoutRoutine;
-        window.handlePhotoUpload = handlePhotoUpload;
-        window.handleMemberChange = handleMemberChange;
-        window.handleRecordMemberChange = handleRecordMemberChange;
-        window.handleDurationChange = handleDurationChange;
-        window.handleDistanceChange = handleDistanceChange;
-        window.handleCaloriesChange = handleCaloriesChange;
-        window.handleBodyPartChange = handleBodyPartChange;
-        window.handleExerciseNameChange = handleExerciseNameChange;
-        window.addNewSet = addNewSet;
-        window.removeSet = removeSet;
-        window.updateSetReps = updateSetReps;
-        window.updateSetWeight = updateSetWeight;
-        window.showMemberPhotos = showMemberPhotos;
-        window.showAllRecordsModal = showAllRecordsModal;
-        window.showDetailRecord = showDetailRecord;
-        window.toggleDeleteMode = toggleDeleteMode;
-        window.toggleRecordSelection = toggleRecordSelection;
-        window.deleteSelectedRecords = deleteSelectedRecords;
-        
-        window.closePhotos = (event) => {
-            if (event && event.target !== event.currentTarget) return;
-            showPhotos = false;
-            selectedMemberPhotos = null;
-            showDeleteMode = false;
-            selectedRecordsToDelete.clear();
-            render();
-        };
+        function generateWorkoutAnalysis(workoutHistory) {
+            const exerciseFrequency = {};
+            const bodyPartFrequency = {};
+            
+            workoutHistory.forEach(workout => {
+                if (workout.type === 'strength') {
+                    exerciseFrequency[workout.exercise] = (exerciseFrequency[workout.exercise] || 0) + 1;
+                    bodyPartFrequency[workout.bodyPart] = (bodyPartFrequency[workout.bodyPart] || 0) + 1;
+                }
+            });
+            
+            const topExercises = Object.entries(exerciseFrequency)
+                .sort(([,a], [,b]) => b - a)
+                .slice(0, 5);
+            
+            const topBodyParts = Object.entries(bodyPartFrequency)
+                .sort(([,a], [,b]) => b - a)
+                .slice(0, 3);
+            
+            const cardioWorkouts = workoutHistory.filter(w => w.type === 'cardio');
+            const strengthWorkouts = workoutHistory.filter(w => w.type === 'strength');
+            
+            const maxDistance = cardioWorkouts.length > 0 ? Math.max(...cardioWorkouts.map(w => w.distance)) : 0;
+            const maxCalories = cardioWorkouts.length > 0 ? Math.max(...cardioWorkouts.map(w => w.calories)) : 0;
+            
+            // 운동별 최대 무게 찾기
+            const maxWeights = {};
+            strengthWorkouts.forEach(workout => {
+                const maxWeight = Math.max(...workout.sets.map(s => s.weight));
+                if (!maxWeights[workout.exercise] || maxWeight > maxWeights[workout.exercise]) {
+                    maxWeights[workout.exercise] = maxWeight;
+                }
+            });
+            
+            const topWeights = Object.entries(maxWeights)
+                .sort(([,a], [,b]) => b - a)
+                .slice(0, 5);
+            
+            return `
+                <div class="cumulative-stats">
+                    <div class="stat-card">
+                        <h5>🥇 유산소 개인 기록</h5>
+                        <p><strong>최장 거리:</strong> ${maxDistance.toFixed(1)}km</p>
+                        <p><strong>최대 칼로리:</strong> ${maxCalories}kcal</p>
+                    </div>
+                    <div class="stat-card">
+                        <h5>🏆 자주 하는 운동 TOP 5</h5>
+                        ${topExercises.map(([exercise, count]) => 
+                            `<div class="top-exercise">${exercise} (${count}회)</div>`
+                        ).join('')}
+                    </div>
+                    <div class="stat-card">
+                        <h5>💪 선호 운동 부위 TOP 3</h5>
+                        ${topBodyParts.map(([part, count]) => 
+                            `<div class="top-exercise">${part} (${count}회)</div>`
+                        ).join('')}
+                    </div>
+                    <div class="stat-card">
+                        <h5>💪 근력 운동 최대 중량 TOP 5</h5>
+                        ${topWeights.map(([exercise, weight]) => 
+                            `<div class="top-exercise">${exercise}: ${weight}kg</div>`
+                        ).join('')}
+                    </div>
+                </div>
+            `;
+        }
 
-        window.closeAllRecords = (event) => {
-            if (event && event.target !== event.currentTarget) return;
-            showAllRecords = false;
-            render();
-        };
+        function generatePersonalBests(workoutHistory) {
+            // 이 함수는 이제 generateWorkoutAnalysis에 통합되어 사용되지 않음
+            return '';
+        }
 
-        window.closeDetailPopup = (event) => {
-            if (event && event.target !== event.currentTarget) return;
-            showDetailPopup = false;
-            selectedDetailRecord = null;
-            render();
-        };
-
-        // Firebase 실시간 데이터 구독
-        const exercisesRef = ref(database, 'exercises');
-        onValue(exercisesRef, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                exercises = Object.keys(data).map(key => Object.assign({ firebaseId: key }, data[key]));
+        function generateWeightProgressReport(user, lastWeekWorkouts) {
+            const workoutHistory = user.workoutHistory || [];
+            const progressList = [];
+            
+            // 지난주 근력 운동들
+            const lastWeekStrength = lastWeekWorkouts.filter(w => w.type === 'strength');
+            
+            lastWeekStrength.forEach(lastWorkout => {
+                // 같은 운동의 이전 기록들 찾기
+                const previousWorkouts = workoutHistory.filter(w => 
+                    w.type === 'strength' && 
+                    w.exercise === lastWorkout.exercise &&
+                    new Date(w.date) < new Date(lastWorkout.date)
+                );
+                
+                if (previousWorkouts.length > 0) {
+                    // 가장 최근 이전 기록
+                    const lastPrevious = previousWorkouts[previousWorkouts.length - 1];
+                    
+                    // 최대 무게 비교
+                    const lastWeekMaxWeight = Math.max(...lastWorkout.sets.map(s => s.weight));
+                    const previousMaxWeight = Math.max(...lastPrevious.sets.map(s => s.weight));
+                    
+                    if (lastWeekMaxWeight > previousMaxWeight) {
+                        progressList.push({
+                            exercise: lastWorkout.exercise,
+                            oldWeight: previousMaxWeight,
+                            newWeight: lastWeekMaxWeight
+                        });
+                    }
+                }
+            });
+            
+            let html = `
+                <div class="report-section">
+                    <h4>📈 중량 상승</h4>
+            `;
+            
+            if (progressList.length === 0) {
+                html += '<p>지난주에는 무게가 증가한 운동이 없습니다. 다음 주에는 더 도전해보세요!</p>';
             } else {
-                exercises = [];
+                html += '<p>축하합니다! 다음 운동들의 무게가 증가했습니다:</p>';
+                progressList.forEach(progress => {
+                    html += `
+                        <div class="weight-increase">
+                            ${progress.exercise}: ${progress.oldWeight}kg → ${progress.newWeight}kg (+${progress.newWeight - progress.oldWeight}kg)
+                        </div>
+                    `;
+                });
             }
-            render();
-        });
+            
+            html += '</div>';
+            
+            return html;
+        }
 
-        const routinesRef = ref(database, 'workoutRoutines');
-        onValue(routinesRef, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                workoutRoutines = Object.keys(data).map(key => Object.assign({ firebaseId: key }, data[key]));
+        function generateCardioReport(user, lastWeekWorkouts) {
+            const workoutHistory = user.workoutHistory || [];
+            const cardioWorkouts = workoutHistory.filter(w => w.type === 'cardio');
+            
+            // 지난주 유산소 총 거리
+            const lastWeekCardio = lastWeekWorkouts.filter(w => w.type === 'cardio');
+            const lastWeekDistance = lastWeekCardio.reduce((sum, w) => sum + (w.distance || 0), 0);
+            
+            let html = `
+                <div class="report-section">
+                    <h4>🏃 지난주 유산소 운동</h4>
+            `;
+            
+            if (lastWeekDistance === 0) {
+                html += '<p>지난주에는 유산소 운동을 하지 않았습니다. 이번 주에는 달려보세요!</p>';
             } else {
-                workoutRoutines = [];
+                // 전체 기록에서 주간 거리들 계산
+                const weeklyDistances = calculateAllWeeklyDistances(cardioWorkouts);
+                const maxDistance = Math.max(...weeklyDistances);
+                const minDistance = Math.min(...weeklyDistances.filter(d => d > 0));
+                
+                let recordClass, message;
+                
+                if (lastWeekDistance === maxDistance && weeklyDistances.length > 1) {
+                    recordClass = 'best-record';
+                    message = `지난주는 ${lastWeekDistance.toFixed(1)}km를 달렸습니다! 🏆 본인의 최고 기록입니다!`;
+                } else if (lastWeekDistance === minDistance && weeklyDistances.length > 1) {
+                    recordClass = 'worst-record';
+                    message = `지난주는 ${lastWeekDistance.toFixed(1)}km를 달렸습니다. 😌 평소보다 조금 덜 달렸습니다.`;
+                } else {
+                    recordClass = 'normal-record';
+                    message = `지난주는 ${lastWeekDistance.toFixed(1)}km를 달렸습니다. 💪 이대로 꾸준히 달려나갑시다!`;
+                }
+                
+                html += `<div class="cardio-record ${recordClass}">${message}</div>`;
             }
-            render();
-        });
+            
+            html += '</div>';
+            
+            return html;
+        }
 
-        // 초기 렌더링
-        render();
+        function calculateAllWeeklyDistances(cardioWorkouts) {
+            const weeklyDistances = [];
+            const weeks = new Set();
+            
+            cardioWorkouts.forEach(workout => {
+                const date = new Date(workout.date);
+                const weekKey = getWeekKey(date);
+                weeks.add(weekKey);
+            });
+            
+            weeks.forEach(weekKey => {
+                const weekWorkouts = cardioWorkouts.filter(w => getWeekKey(new Date(w.date)) === weekKey);
+                const weekDistance = weekWorkouts.reduce((sum, w) => sum + (w.distance || 0), 0);
+                if (weekDistance > 0) {
+                    weeklyDistances.push(weekDistance);
+                }
+            });
+            
+            return weeklyDistances;
+        }
+
+        function getWeekKey(date) {
+            const monday = new Date(date);
+            monday.setDate(date.getDate() - date.getDay() + 1);
+            monday.setHours(0, 0, 0, 0);
+            return monday.toISOString().split('T')[0];
+        }
+
+        function deleteWorkout(workoutId) {
+            if (!confirm('이 운동 기록을 삭제하시겠습니까?')) {
+                return;
+            }
+
+            const workoutIndex = currentUser.workoutHistory.findIndex(w => w.id === workoutId);
+            
+            if (workoutIndex !== -1) {
+                const deletedWorkout = currentUser.workoutHistory[workoutIndex];
+                
+                // 운동 기록 삭제
+                const updatedHistory = [...currentUser.workoutHistory];
+                updatedHistory.splice(workoutIndex, 1);
+                
+                let updates = {
+                    workoutHistory: updatedHistory
+                };
+                
+                // 유산소 운동인 경우 칼로리도 차감
+                if (deletedWorkout.type === 'cardio') {
+                    updates.weeklyCalories = Math.max(0, (currentUser.weeklyCalories || 0) - (deletedWorkout.calories || 0));
+                }
+                
+                updateUserInFirebase(currentUser.id, updates)
+                    .then(() => {
+                        // 현재 사용자 정보 업데이트
+                        currentUser.workoutHistory = updates.workoutHistory;
+                        if (updates.weeklyCalories !== undefined) {
+                            currentUser.weeklyCalories = updates.weeklyCalories;
+                        }
+                        
+                        // 갤러리 새로고침
+                        showPhotoGallery(currentUser);
+                        
+                        // 백그라운드에서 홈 화면 사용자 카드도 새로고침
+                        loadUsers();
+                        
+                        alert('운동 기록이 삭제되었습니다.');
+                    })
+                    .catch(error => {
+                        console.error('운동 삭제 오류:', error);
+                        alert('운동 기록 삭제에 실패했습니다.');
+                    });
+            }
+        }
+
+        // 모달 외부 클릭시 닫기
+        window.onclick = function(event) {
+            const modal = document.getElementById('workoutModal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        }
     </script>
 </body>
 </html>

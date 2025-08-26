@@ -974,24 +974,61 @@
         let selectedPurpose = null;
         let selectedBodyPart = null;
         let uploadedImage = null;
+        // 캐시 변수들 추가
+        let usersCache = null;
+        let lastCacheUpdate = 0;
+        const CACHE_DURATION = 30000; // 30초
 
         // Firebase 데이터베이스 함수들
         function saveUserToFirebase(user) {
-            return database.ref('users/' + user.id).set(user);
+            return database.ref('users/' + user.id).set(user).then(() => {
+                // 캐시 무효화
+                usersCache = null;
+            });
         }
 
         function getUsersFromFirebase() {
+            const now = Date.now();
+            if (usersCache && (now - lastCacheUpdate) < CACHE_DURATION) {
+                return Promise.resolve([...usersCache]);
+            }
+            
             return database.ref('users').once('value').then(snapshot => {
                 const users = [];
                 snapshot.forEach(childSnapshot => {
-                    users.push(childSnapshot.val());
+                    const user = childSnapshot.val();
+                    
+                    // 데이터 구조 정리
+                    if (user.workoutHistory && typeof user.workoutHistory === 'object' && !Array.isArray(user.workoutHistory)) {
+                        // 객체를 배열로 변환
+                        user.workoutHistory = Object.values(user.workoutHistory);
+                        
+                        // Firebase에 수정된 데이터 저장
+                        database.ref('users/' + user.id).update({
+                            workoutHistory: user.workoutHistory
+                        });
+                    }
+                    
+                    // workoutHistory가 없으면 빈 배열로 초기화
+                    if (!user.workoutHistory) {
+                        user.workoutHistory = [];
+                    }
+                    
+                    users.push(user);
                 });
+                
+                usersCache = [...users];
+                lastCacheUpdate = now;
+                
                 return users;
             });
         }
 
         function updateUserInFirebase(userId, updates) {
-            return database.ref('users/' + userId).update(updates);
+            return database.ref('users/' + userId).update(updates).then(() => {
+                // 캐시 무효화
+                usersCache = null;
+            });
         }
 
         function deleteUserFromFirebase(userId) {
@@ -1118,6 +1155,7 @@
                 });
         }
 
+
         function calculateWeeklyWorkouts(workoutHistory) {
             const today = new Date();
             const currentDay = today.getDay(); // 0 = 일요일, 1 = 월요일
@@ -1149,16 +1187,28 @@
         }
 
         function selectUserForWorkout(userId) {
-            getUsersFromFirebase()
-                .then(users => {
-                    const user = users.find(u => u.id === userId);
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = '로딩...';
+            btn.disabled = true;
+            
+            // 개별 사용자만 조회
+            database.ref('users/' + userId).once('value')
+                .then(snapshot => {
+                    const user = snapshot.val();
                     if (user) {
                         selectUser(user);
+                    } else {
+                        alert('사용자 정보를 찾을 수 없습니다.');
                     }
                 })
                 .catch(error => {
                     console.error('사용자 선택 오류:', error);
                     alert('사용자 정보를 불러오는데 실패했습니다.');
+                })
+                .finally(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
                 });
         }
 
@@ -1255,7 +1305,12 @@
                 return;
             }
 
-            // 운동 기록 저장
+            // 저장 버튼 비활성화
+            const saveBtn = event.target;
+            const originalText = saveBtn.textContent;
+            saveBtn.textContent = '저장 중...';
+            saveBtn.disabled = true;
+
             const workout = {
                 id: Date.now().toString(),
                 type: 'strength',
@@ -1265,24 +1320,27 @@
                 sets: sets
             };
 
-            // 사용자 운동 기록 업데이트
+            // 기존 구조에 맞게 업데이트 (배열 형태)
             const updates = {
-                workoutHistory: [...(currentUser.workoutHistory || []), workout],
-                weeklyBodyParts: currentUser.weeklyBodyParts || []
+                workoutHistory: [...(currentUser.workoutHistory || []), workout]
             };
-
-            // 운동 부위 추가 (중복 제거)
-            if (!updates.weeklyBodyParts.includes(selectedBodyPart)) {
-                updates.weeklyBodyParts.push(selectedBodyPart);
+            
+            // weeklyBodyParts 업데이트
+            const currentBodyParts = currentUser.weeklyBodyParts || [];
+            if (!currentBodyParts.includes(selectedBodyPart)) {
+                currentBodyParts.push(selectedBodyPart);
+                updates.weeklyBodyParts = currentBodyParts;
             }
 
             updateUserInFirebase(currentUser.id, updates)
                 .then(() => {
                     alert(`${exerciseName} 운동이 저장되었습니다!`);
                     
-                    // 현재 사용자 정보 업데이트
+                    // 로컬 데이터 업데이트
                     currentUser.workoutHistory = updates.workoutHistory;
-                    currentUser.weeklyBodyParts = updates.weeklyBodyParts;
+                    if (updates.weeklyBodyParts) {
+                        currentUser.weeklyBodyParts = updates.weeklyBodyParts;
+                    }
                     
                     // 초기화
                     selectedBodyPart = null;
@@ -1291,13 +1349,16 @@
                     });
                     document.getElementById('strengthWorkout').style.display = 'none';
                     
-                    // 홈으로 이동하면서 사용자 카드 새로고침
                     showStep('step1');
                     loadUsers();
                 })
                 .catch(error => {
                     console.error('운동 저장 오류:', error);
                     alert('운동 저장에 실패했습니다.');
+                })
+                .finally(() => {
+                    saveBtn.textContent = originalText;
+                    saveBtn.disabled = false;
                 });
         }
 
@@ -1337,30 +1398,41 @@
                 return;
             }
 
-            // 유산소 운동 기록 저장
-            const workout = {
-                id: Date.now().toString(),
-                type: 'cardio',
-                date: new Date().toISOString(),
-                time: parseInt(time),
-                distance: parseFloat(distance),
-                calories: parseInt(calories),
-                image: uploadedImage
-            };
+            // 저장 버튼 비활성화
+            const saveBtn = event.target;
+            const originalText = saveBtn.textContent;
+            saveBtn.textContent = '저장 중...';
+            saveBtn.disabled = true;
 
-            // 사용자 정보 업데이트
-            const updates = {
-                workoutHistory: [...(currentUser.workoutHistory || []), workout],
-                weeklyCalories: (currentUser.weeklyCalories || 0) + parseInt(calories)
-            };
+            // 이미지 압축 및 리사이징
+            compressImage(uploadedImage, 800, 0.7)
+                .then(compressedImage => {
+                    const workout = {
+                        id: Date.now().toString(),
+                        type: 'cardio',
+                        date: new Date().toISOString(),
+                        time: parseInt(time),
+                        distance: parseFloat(distance),
+                        calories: parseInt(calories),
+                        image: compressedImage
+                    };
 
-            updateUserInFirebase(currentUser.id, updates)
+                    // 기존 구조에 맞게 업데이트 (배열 형태)
+                    const updates = {
+                        workoutHistory: [...(currentUser.workoutHistory || []), workout],
+                        weeklyCalories: (currentUser.weeklyCalories || 0) + parseInt(calories)
+                    };
+
+                    return updateUserInFirebase(currentUser.id, updates).then(() => {
+                        // 로컬 데이터 업데이트
+                        currentUser.workoutHistory = updates.workoutHistory;
+                        currentUser.weeklyCalories = updates.weeklyCalories;
+                        
+                        return workout;
+                    });
+                })
                 .then(() => {
                     alert('유산소 운동이 저장되었습니다!');
-                    
-                    // 현재 사용자 정보 업데이트
-                    currentUser.workoutHistory = updates.workoutHistory;
-                    currentUser.weeklyCalories = updates.weeklyCalories;
                     
                     // 입력 필드 초기화
                     document.getElementById('cardioTime').value = '';
@@ -1369,13 +1441,16 @@
                     document.getElementById('imagePreview').innerHTML = '<p>📷 사진을 업로드하세요</p>';
                     uploadedImage = null;
                     
-                    // 홈으로 이동하면서 사용자 카드 새로고침
                     showStep('step1');
                     loadUsers();
                 })
                 .catch(error => {
                     console.error('운동 저장 오류:', error);
-                    alert('운동 저장에 실패했습니다.');
+                    alert('운동 저장에 실패했습니다. 이미지가 너무 크거나 네트워크 문제일 수 있습니다.');
+                })
+                .finally(() => {
+                    saveBtn.textContent = originalText;
+                    saveBtn.disabled = false;
                 });
         }
 
@@ -2148,6 +2223,44 @@
                         alert('운동 기록 삭제에 실패했습니다.');
                     });
             }
+        }
+
+        // 이미지 압축 함수
+        function compressImage(base64String, maxWidth = 800, quality = 0.7) {
+            return new Promise((resolve) => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                img.onload = function() {
+                    // 비율 유지하면서 리사이징
+                    let { width, height } = img;
+                    
+                    if (width > height) {
+                        if (width > maxWidth) {
+                            height = (height * maxWidth) / width;
+                            width = maxWidth;
+                        }
+                    } else {
+                        if (height > maxWidth) {
+                            width = (width * maxWidth) / height;
+                            height = maxWidth;
+                        }
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    
+                    // 이미지 그리기
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // 압축된 base64 반환
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+                    resolve(compressedBase64);
+                };
+                
+                img.src = base64String;
+            });
         }
 
         // 모달 외부 클릭시 닫기
